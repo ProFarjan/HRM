@@ -63,6 +63,13 @@ php index.php migrate                                                          #
 `cron` and `migrate` are command-line only: over HTTP they answer 404. Each job loops over the configured tenants
 (or only `TENANT_DB`). Jobs marked with a build step are added by that step.
 
+## Attendance reports
+
+Under **Reports** in the sidebar (permission `attendance_report`; Excel needs `export_hr` too): daily attendance, monthly status grid, **monthly in/out
+sheet** (every employee, every day, check-in over check-out), **employee report** (one person, by month or from-to date, with all punches, breaks, late,
+overtime and a plain-language summary), **attendance summary** (attendance %, findings, daily chart), late arrivals, absences, overtime and missing
+check-outs. The definitions are in CLAUDE.md, "Attendance reports".
+
 ## Attendance devices
 
 Two ways in; both end in the same idempotent punch ingestion (a punch that is sent twice is stored once).
@@ -104,6 +111,7 @@ HRM_ADMIN_PASSWORD=... node tests/e2e/organisation_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/time_pages.js
 TENANT_DB=hrm_dev php tests/e2e/seed_attendance.php                                 # demo punches (re-run resets them)
 HRM_ADMIN_PASSWORD=... node tests/e2e/attendance_pages.js
+HRM_ADMIN_PASSWORD=... node tests/e2e/reports_pages.js                                  # attendance reports (after seed_attendance.php)
 TENANT_DB=hrm_dev php tests/e2e/seed_devices.php                                    # demo devices, a pending serial number, a closed day
 HRM_ADMIN_PASSWORD=... node tests/e2e/devices_pages.js
 ```

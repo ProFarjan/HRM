@@ -46,6 +46,9 @@
             <file>tests/Attendance_test.php</file>
             <file>tests/Attendance_permission_test.php</file>
             <file>tests/Attendance_flow_test.php</file>
+            <file>tests/Attendance_analytics_test.php</file>
+            <file>tests/Attendance_reports_test.php</file>
+            <file>tests/Reports_flow_test.php</file>
             <file>tests/Adms_parser_test.php</file>
             <file>tests/Branch_scope_test.php</file>
             <file>tests/Service_contract_test.php</file>

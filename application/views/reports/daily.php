@@ -2,6 +2,7 @@
 <div class="content-wrapper">
 	<section class="content-header"><h1><?= e(t('rep_daily')) ?> <small><?= e(show_date($date) . ' - ' . $user['branch_name']) ?></small></h1></section>
 	<section class="content">
+		<?php $this->load->view('reports/_nav', array('active' => 'daily')); ?>
 		<div class="box box-primary">
 			<div class="box-header with-border no-print">
 				<form class="form-inline" method="get" action="<?= site_url('reports/daily') ?>" id="daily-filter">

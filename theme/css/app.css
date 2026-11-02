@@ -20,9 +20,22 @@ table.dataTable thead th { white-space: nowrap; }
 .monthly-grid .att-hol { background: #fdf2e0; color: #8a6d3b; }
 .monthly-grid .att-w { background: #f0f0f0; color: #999; }
 .monthly-grid .att-late { box-shadow: inset 0 -3px 0 #dd4b39; }
+/* in/out sheet and employee report */
+.inout-grid .io-cell { line-height: 1.15; min-width: 38px; }
+.inout-grid .io-in, .inout-grid .io-out { font-size: 10px; display: inline-block; }
+.inout-grid .io-out { color: #666; }
+.inout-grid .io-missing { color: #f39c12; font-weight: bold; }
+.inout-grid thead th { position: sticky; top: 0; background: #fff; }
+.inout-grid tbody th:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }
+#employee-table tr.holiday > td { background: #fdf2e0; }
+#employee-table tr.weekoff > td { background: #f0f0f0; color: #888; }
+#employee-table .punch-times { font-size: 11px; color: #555; white-space: nowrap; }
+.report-nav > li > a { padding: 6px 12px; }
 @media print {
 	.main-header, .main-sidebar, .main-footer, .no-print, .content-header small { display: none !important; }
 	.content-wrapper { margin-left: 0 !important; min-height: 0 !important; }
 	.box { border: 0; box-shadow: none; }
 	a[href]:after { content: ""; }
+	.inout-grid thead th, .inout-grid tbody th:first-child { position: static; }
+	.report-cards .small-box { border: 1px solid #ddd; }
 }

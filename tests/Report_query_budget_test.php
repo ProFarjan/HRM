@@ -2,7 +2,8 @@
 /** G5 / P15: a monthly attendance report for 500 employees x 30 days runs in <= 6 queries; the daily report in <= 3. */
 class Report_query_budget_test extends Hrm_test_case
 {
-    public function test_monthly_report_for_500_employees_by_30_days()
+    /** 500 employees with 30 April days each (see the first test), logged in as a system user; returns the employee ids */
+    protected function seed_workers()
     {
         $this->act_as_new_user('boss', array(), TRUE);
         $branch = current_branch_id();
@@ -30,6 +31,12 @@ class Report_query_budget_test extends Hrm_test_case
             $this->db->insert_batch('attendance', $rows, NULL, 3000);
         }
 
+        return $ids;
+    }
+
+    public function test_monthly_report_for_500_employees_by_30_days()
+    {
+        $ids = $this->seed_workers();
         $this->CI->load->model('Attendance_reports_model');
         has_permission('show_all_attendance');                        // per-request caches warm, as on a real page
         hr_setting('date_format');
@@ -46,6 +53,45 @@ class Report_query_budget_test extends Hrm_test_case
         $daily = $this->CI->Attendance_reports_model->daily('2026-04-11');            // the 10th is a weekly off in this seed
         $this->assertLessThanOrEqual(3, $this->queries_before() - $before);
         $this->assertSame(500, $daily['totals']['Present']);
+    }
+
+    public function test_period_reports_for_500_employees_by_30_days_use_two_queries_and_a_fixed_number_for_one_employee()
+    {
+        $ids = $this->seed_workers();
+        $this->CI->load->model('Attendance_reports_model');
+        has_permission('show_all_attendance');
+        hr_setting('date_format');
+        hr_setting('late_days_per_absent');
+        $before = $this->queries_before();
+        $data = $this->CI->Attendance_reports_model->period('2026-04-01', '2026-04-30');
+        $used = $this->queries_before() - $before;
+        $this->assertLessThanOrEqual(3, $used, "period report used $used queries");
+        $this->assertCount(500, $data['employees']);
+        $this->assertNull($data['error']);
+        $before = $this->queries_before();
+        $stats = Attendance_analytics::summarise($data['employees'], $data['grid'], '2026-04-01', '2026-04-30', '2026-05-01', 3);
+        $this->assertSame(0, $this->queries_before() - $before, 'the analytics run no query at all');
+        $this->assertEquals(26.0, $stats['employees'][$ids[0]]['present']);
+
+        $before = $this->queries_before();
+        $one = $this->CI->Attendance_reports_model->employee_report($ids[0], '2026-04-01', '2026-04-30');
+        $used = $this->queries_before() - $before;
+        $this->assertLessThanOrEqual(12, $used, "employee report used $used queries");
+        $this->assertCount(30, $one['days']);
+        $before = $this->queries_before();
+        $this->CI->Attendance_reports_model->employee_report($ids[0], '2026-01-01', '2026-12-31');
+        $this->assertLessThanOrEqual(12, $this->queries_before() - $before, 'a whole year costs the same number of queries');
+    }
+
+    public function test_a_period_report_that_is_too_large_is_refused_not_run()
+    {
+        $this->act_as_new_user('boss', array(), TRUE);
+        $this->insert_employee('BIG1');
+        $this->CI->load->model('Attendance_reports_model');
+        $days = (int) floor(Attendance_reports_model::MAX_CELLS) + 1;              // one employee x more days than the cap
+        $data = $this->CI->Attendance_reports_model->period('2026-01-01', date('Y-m-d', strtotime('2026-01-01 +' . $days . ' days')));
+        $this->assertNotNull($data['error']);
+        $this->assertSame(array(), $data['employees']);
     }
 
     public function test_reports_follow_the_own_records_rule()

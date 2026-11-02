@@ -794,6 +794,28 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
 - **Permissions.** `devices_view` list + call log; `devices_manage` add / edit / delete / approve / allow address; `devices_keys` keys;
   `devices_commands` queue + enrol; `attendance_punches` unmatched + closed-day lists; `attendance_import` import. `Api` / `Iclock` map to `@device`.
 
+### Attendance reports (after step 5; controller `Reports`, library `Attendance_analytics`)
+- **Pages** (all need `attendance_report`; sidebar group *Reports*; Excel needs `export_hr` as well, is audited as module `reports` / action `export`,
+  and a range that is too long answers HTTP 422 instead of running): `daily`, `monthly` (status grid), `inout` (all employees x the days of a month, each
+  day showing the check-in over the check-out; red = late, `?` = no check-out yet), `employee` (one person, **month** or **from-to** up to 366 days),
+  `summary` (period summary + findings + a daily present / absent chart), `late`, `absent`, `overtime`, `missing` (check-out missing).
+- **Scope** is the attendance rule everywhere: the working branch, plus `scope_department` without `show_all_attendance` (yourself and the
+  departments you head). The employee report checks the person the same way (403 otherwise) and its picker lists only people you may see, leavers included.
+- **Cost (G5):** the period reports run **two queries** (employees, attendance rows with the shift) and the figures are computed in PHP by
+  `Attendance_analytics` (no query in a loop); at most 92 days and `MAX_CELLS` (100 000 employee-days), else the report says so and runs nothing.
+  The employee report runs a fixed number of queries whatever the length (employee, rows, `Shift_calculator::plan`, that person's punches).
+- **Definitions** (`Attendance_analytics`, `Attendance_analytics_test`): present = Present + Half-day x 0.5; absent = Absent + Half-day x 0.5;
+  expected = present + absent + leave (holidays and weekly offs are not expected); attendance % = present / expected; late day = Present or Half-day with
+  `late_minutes > 0`; **missing check-out** = Present with a check-in and no check-out on a day before today; **no record** = a day of employment before
+  today with no attendance row (the day close has not run for it); absence streak = consecutive Absent rows, Holiday / Weekly Off rows in between do not
+  break it, any other status does; average in / out = mean of the check-in / check-out times of worked days.
+- **Findings** ("What stands out"): sentences built from the numbers (overall %, people at the `late_days_per_absent` limit, most late, most absent,
+  3+ working days absent in a row, perfect attendance, overtime, missing check-outs, days without a record, the lowest day). Each is a language key
+  with placeholders, so English and Bangla stay in step (`Helpers_test`).
+- **Employee report** lists every day of the period: the attendance row, or - for a day without one - the plan (weekly off, holiday, not employed,
+  upcoming, no record), the shift, in, out, break, hours, late, early leave, overtime and **all punches of the day** (a double tap struck through; the
+  tail of a night shift is shown under the day it belongs to).
+
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
   history, documents, device PIN + **Enrol on device** -> queues `create_user`), profile (attendance, leave balance, advances, loans,
@@ -810,8 +832,8 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
   `Roles`, `Audit`. `Api` (device JSON), `Iclock` (ADMS), `Cron` (CLI only), `Auth` (login, password change).
 
 ## Reports (`Reports` controller; filters, print, Excel, PDF; all set-based per G5)
-Daily attendance, monthly attendance grid (P/A/L/H/W/½, late colouring), employee monthly detail (punch pairs, break minutes from
-`attendance_punches`), late, absent, missing check-out, overtime, leave (type / employee / period) and balance, payroll register (month,
+Daily attendance, monthly attendance grid (P/A/L/H/W/½, late colouring), monthly in/out sheet, employee detail (month or from-to, all punches and
+breaks) *(done, see "Attendance reports")*, summary with findings, late, absent, missing check-out, overtime *(done)*, leave (type / employee / period) and balance, payroll register (month,
 department), bank salary sheet (account number, amount), payslips (bulk), advance and loan statements, salary payments by account,
 headcount (joiners/leavers, department/designation), staff performance (attendance %, late count, OT hours, leaves - **HR only**;
 pos-retails' version also mixed in sales figures).
@@ -985,6 +1007,9 @@ regenerating or editing a past month uses the current structure.
   rate limit, ADMS command round trip), `Device_health_test` (colours, drift, lost-punch rule, cron output), `Devices_flow_test` (HTTP: permissions,
   CRUD, keys shown once, approve pending, commands, enrol, exit queues delete_user, call log, branch scope), `Punch_review_test` (unmatched list,
   link PIN, closed-day list), `Punch_import_test` (preview writes nothing, import idempotent, CSV, tokens).
+- **Attendance report tests:** `Attendance_analytics_test` (every definition above, streaks, insights, helpers), `Attendance_reports_test` (employee
+  report days / punches / night shift / scope, period rows), `Report_query_budget_test` (period report 500 x 30 days <= 3 queries, the analytics 0 queries,
+  employee report <= 12 queries even for a year), `Reports_flow_test` (HTTP: 403 per report and per Excel, content, validation, audited exports, own / department scope).
 - **Attendance tests (step 4):** `Punch_ingestion_test` (P4, P5: breaks, debounce, re-send no-op, unmatched then linked, reused PIN,
   night shift, manual row kept until rebuild), `Punch_ingestion_atomicity_test` (a forced failure stores nothing), `Day_close_test`
   (P1: Holiday > Weekly Off > Absent, gaps only, join/exit, never today, missing check-out), `Attendance_test` (mark, bulk, approve,
