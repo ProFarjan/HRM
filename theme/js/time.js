@@ -32,6 +32,42 @@
 				{ data: null, orderable: false, render: function (row) { return actions($h, row, '#holidays-table'); } }
 			], '#holidays-filter', { order: [[0, 'asc']] });
 		}
+		// split shift: several duty periods instead of one start / end
+		var $split = $('#f_split');
+		if ($split.length) {
+			var rows = function () { return $('#periods-table .period-row'); };
+			var total = function () {
+				var minutes = 0;
+				rows().each(function (i) {
+					$(this).find('.period-no').text(i + 1);
+					var a = $(this).find('input[name="seg_start[]"]').val(), b = $(this).find('input[name="seg_end[]"]').val();
+					if (a && b) {
+						var d = (parseInt(b.slice(0, 2), 10) * 60 + parseInt(b.slice(3, 5), 10)) - (parseInt(a.slice(0, 2), 10) * 60 + parseInt(a.slice(3, 5), 10));
+						minutes += (d + 1440) % 1440;
+					}
+				});
+				$('#periods-total').text((minutes / 60).toFixed(2) + ' h');
+				$('#period-add').prop('disabled', rows().length >= parseInt($('#period-add').data('max'), 10));
+				$('.period-remove').prop('disabled', rows().length <= 2);
+			};
+			var toggle = function () {
+				var on = $split.is(':checked');
+				$('#split-fields').toggle(on).find('input').prop('disabled', !on);
+				$('#single-fields').toggle(!on).find('input').prop('disabled', on);
+				total();
+			};
+			$split.on('change', toggle);
+			$(document).on('input change', '#periods-table input', total);
+			$(document).on('click', '.period-remove', function () { if (rows().length > 2) { $(this).closest('tr').remove(); total(); } });
+			$('#period-add').on('click', function () {
+				var $last = rows().last().clone();
+				$last.find('input[name="seg_start[]"]').val($last.find('input[name="seg_end[]"]').val());
+				$last.find('input[name="seg_end[]"]').val('');
+				$('#periods-table tbody').append($last);
+				total();
+			});
+			toggle();
+		}
 		function nightHint() {
 			var start = $('#f_start').val(), end = $('#f_end').val();
 			$('#night-hint').toggle(!!start && !!end && end < start);

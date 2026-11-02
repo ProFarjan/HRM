@@ -50,6 +50,7 @@ abstract class Device_test_case extends Hrm_test_case
             $db->query('DELETE FROM ' . $table);
         }
         $db->query('DELETE FROM employee_shifts');
+        $db->query("DELETE FROM shift_segments WHERE shift_id IN (SELECT id FROM shifts WHERE shift_code LIKE 'DV%')");
         $db->query("DELETE FROM shifts WHERE shift_code LIKE 'DV%'");
         $db->query('DELETE FROM employee_pin_history');
         $db->query("DELETE FROM employees WHERE employee_code LIKE 'DV-%'");

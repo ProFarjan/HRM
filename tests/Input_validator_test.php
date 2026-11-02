@@ -285,4 +285,25 @@ class Input_validator_test extends Hrm_test_case
         $this->assertNull($v->enum_list('none', $allowed, TRUE));
         $this->assertCount(3, $v->errors());
     }
+
+    public function test_time_list_reads_the_times_of_a_repeated_field()
+    {
+        $post = array('seg_start' => array('10:00', '18:30:15'), 'seg_end' => array('14:00', ''), 'bad' => array('10:00', '25:00'), 'many' => array('01:00', '02:00', '03:00'), 'text' => 'x');
+        $v = $this->v($post);
+        $this->assertSame(array('10:00:00', '18:30:15'), $v->time_list('seg_start'));
+        $this->assertTrue($v->ok());
+        $this->assertSame(array('14:00:00', NULL), $v->time_list('seg_end', 4, TRUE, TRUE), 'a blank is NULL when allowed');
+        $this->assertTrue($v->ok());
+        $v = $this->v($post);
+        $v->time_list('seg_end');
+        $this->assertFalse($v->ok(), 'a blank is an error when not allowed');
+        foreach (array(array('bad'), array('many', 2), array('text'), array('absent')) as $args) {
+            $v = $this->v($post);
+            call_user_func_array(array($v, 'time_list'), $args);
+            $this->assertFalse($v->ok(), implode(',', $args));
+        }
+        $v = $this->v($post);
+        $this->assertSame(array(), $v->time_list('absent', 4, FALSE));
+        $this->assertTrue($v->ok(), 'optional and missing is fine');
+    }
 }

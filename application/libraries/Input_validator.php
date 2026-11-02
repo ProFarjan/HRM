@@ -142,6 +142,34 @@ class Input_validator
         return $m[1] . ':' . $m[2] . ':' . (isset($m[4]) ? $m[4] : '00');
     }
 
+    /**
+     * A list of times (the duty periods of a split shift: `seg_start[]`, or the in / out of each period of a day). At most $max_count
+     * entries, each 'H:i[:s]' -> 'H:i:s'; with $allow_empty a blank entry is NULL (a period with no in or no out), else it is an error.
+     */
+    public function time_list($name, $max_count = 6, $required = TRUE, $allow_empty = FALSE)
+    {
+        $raw = $this->read($name);
+        if ( ! is_array($raw) || count($raw) === 0) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : array();
+        }
+        if (count($raw) > $max_count) {
+            return $this->fail($name, sprintf($this->t('v_too_many', '%s has too many entries.'), $this->label($name)));
+        }
+        $out = array();
+        foreach (array_values($raw) as $item) {
+            $item = is_string($item) ? trim($item) : $item;
+            if ($item === '' && $allow_empty) {
+                $out[] = NULL;
+                continue;
+            }
+            if ( ! is_string($item) || ! preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/', $item, $m)) {
+                return $this->fail($name, sprintf($this->t('v_time', '%s is not a valid time.'), $this->label($name)));
+            }
+            $out[] = $m[1] . ':' . $m[2] . ':' . (isset($m[4]) ? $m[4] : '00');
+        }
+        return $out;
+    }
+
     /** amount with at most 2 decimals within [$min, $max]; returned rounded to 2 places */
     public function money($name, $min = 0.0, $max = 99999999.99, $required = TRUE)
     {

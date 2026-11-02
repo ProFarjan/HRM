@@ -22,6 +22,8 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 class Punch_ingestor
 {
     const NIGHT_TAIL_MINUTES = 240;
+    /** remark on a split-shift day with a duty period that has no punches or no check-out */
+    const REMARK_INCOMPLETE = 'incomplete duty period';
 
     /** @var Shift_calculator */
     protected $calc;
@@ -163,23 +165,41 @@ class Punch_ingestor
         $first = $punches[0]['punch_at'];
         $last = count($punches) > 1 ? $punches[count($punches) - 1]['punch_at'] : NULL;
         $shift = $today_plan['shift'];
-        $metrics = Shift_calculator::metrics($shift, substr($first, 11), $last === NULL ? NULL : substr($last, 11),
-            array('off_day' => $today_plan['day_type'] !== Shift_calculator::DAY_WORKING));
+        $off_day = $today_plan['day_type'] !== Shift_calculator::DAY_WORKING;
+        $periods = NULL;
+        if (Shift_calculator::is_split($shift)) {
+            // a split shift (10:00-14:00 + 18:00-22:00): each duty period is measured on its own, the gap between them is not worked time
+            $m = Shift_calculator::split_metrics($shift, $date, array_column($punches, 'punch_at'), array('off_day' => $off_day));
+            $periods = $m['periods'];
+            $check_in = $m['check_in'];
+            $check_out = $m['check_out'];
+            $break = $m['break_minutes'];
+            $remarks = $m['incomplete'] > 0 ? self::REMARK_INCOMPLETE : NULL;
+        } else {
+            $m = Shift_calculator::metrics($shift, substr($first, 11), $last === NULL ? NULL : substr($last, 11), array('off_day' => $off_day));
+            $check_in = substr($first, 11);
+            $check_out = $last === NULL ? NULL : substr($last, 11);
+            $break = self::break_minutes($punches);
+            $remarks = NULL;
+        }
         $row = array(
             'branch_id' => (int) $db->query('SELECT branch_id FROM employees WHERE id = ?', array($employee_id))->row()->branch_id,
             'shift_id' => $shift ? (int) $shift['id'] : NULL,
-            'check_in' => substr($first, 11), 'check_out' => $last === NULL ? NULL : substr($last, 11),
+            'check_in' => $check_in, 'check_out' => $check_out,
             'first_punch_at' => $first, 'last_punch_at' => $last === NULL ? $first : $last,
             'status' => 'Present', 'approval_status' => 'Approved', 'approval_note' => NULL,
-            'working_hours' => $metrics['working_hours'], 'break_minutes' => self::break_minutes($punches),
-            'late_minutes' => $metrics['late_minutes'], 'early_leave_minutes' => $metrics['early_leave_minutes'],
-            'overtime_hours' => $metrics['overtime_hours'], 'source' => 'punch', 'remarks' => NULL, 'updated_at' => now_local(),
+            'working_hours' => $m['working_hours'], 'break_minutes' => $break,
+            'late_minutes' => $m['late_minutes'], 'early_leave_minutes' => $m['early_leave_minutes'],
+            'overtime_hours' => $m['overtime_hours'], 'source' => 'punch', 'remarks' => $remarks, 'updated_at' => now_local(),
         );
         if ($existing) {
             $db->where('id', (int) $existing['id'])->update('attendance', $row);
+            $attendance_id = (int) $existing['id'];
         } else {
             $db->insert('attendance', array_merge($row, array('employee_id' => $employee_id, 'attendance_date' => $date, 'created_at' => now_local())));
+            $attendance_id = (int) $db->insert_id();
         }
+        Attendance_periods::store($attendance_id, $periods);
         return 'rebuilt';
     }
 
