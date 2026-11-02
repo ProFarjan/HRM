@@ -393,6 +393,8 @@ class Employees_model extends MY_Model
             }
             if ($old['device_pin'] !== NULL) {
                 $this->to_history($old, $exit_date);
+                // take the leaver off the devices (queued; delivered on each device's next call)
+                Device_command_queue::enqueue_for_branch((int) $old['branch_id'], 'delete_user', array('user_id' => $old['device_pin']), current_user_id());
             }
             $changes = array('status' => $status, 'exit_date' => $exit_date, 'exit_reason' => $reason, 'device_pin' => NULL, 'device_pin_from' => NULL, 'updated_at' => now_local());
             $this->db->where('id', $id)->update('employees', $changes);
@@ -445,7 +447,15 @@ class Employees_model extends MY_Model
         if ( ! $v->ok()) {
             return $v->message();
         }
-        $from = $from !== NULL ? $from : today_local();
+        return $this->assign_pin($id, $pin, $from !== NULL ? $from : today_local());
+    }
+
+    /**
+     * The rules of change_pin() for a PIN that is already validated (digits or NULL) and a date (Y-m-d). Also used when HR links an
+     * unmatched PIN of the punch list to an employee.
+     */
+    public function assign_pin($id, $pin, $from)
+    {
         $id = (int) $id;
         list($ok, $message) = Tx::run(function () use ($id, $pin, $from) {
             $old = $this->lock($id);

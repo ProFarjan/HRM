@@ -46,6 +46,14 @@
             <file>tests/Attendance_test.php</file>
             <file>tests/Attendance_permission_test.php</file>
             <file>tests/Attendance_flow_test.php</file>
+            <file>tests/Adms_parser_test.php</file>
+            <file>tests/Branch_scope_test.php</file>
+            <file>tests/Service_contract_test.php</file>
+            <file>tests/Device_auth_test.php</file>
+            <file>tests/Device_health_test.php</file>
+            <file>tests/Devices_flow_test.php</file>
+            <file>tests/Punch_review_test.php</file>
+            <file>tests/Punch_import_test.php</file>
             <file>tests/Migration_roundtrip_test.php</file>
         </testsuite>
     </testsuites>

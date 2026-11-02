@@ -380,14 +380,18 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
 ### Devices
 - `devices`* (id, branch_id, name, serial_number (ADMS SN, unique), ip, port, protocol ENUM('UDP','TCP'), comm_mode
   ENUM('adms_push','windows_service'), timezone, allowed_ips, last_ip, last_seen_at, last_punch_at, clock_offset_seconds, firmware,
-  status ENUM('active','disabled')).
-- `device_keys`* (id, branch_id, device_id NULL, label, key_hash, created_by, created_at, last_used_at, revoked_at) - a key is bound to
-  a branch (and optionally one device); the branch of a punch comes **only** from the key / device (P3, P17).
+  status ENUM('active','disabled'); added in step 5: `last_upload_at` (when the server last received a batch with punches),
+  `lost_punch_alert`, `health_checked_at`, `blocked_ip` + `blocked_at` (an address that was refused). `serial_number` is NULL for
+  Windows Service devices; unique `(branch_id, name)`).
+- `device_keys`* (id, branch_id, device_id NULL, label, key_hash, created_by, created_at, last_used_at, revoked_at; step 5 adds
+  `key_hint` = last 4 characters and `revoked_by`) - a key is bound to a branch (and optionally one device); the branch of a punch
+  comes **only** from the key / device (P3, P17).
 - `devices_pending`* (serial_number PK, ip, first_seen_at, last_seen_at, hits) - unknown ADMS serial numbers; capped at 50 rows, purged
   after 30 days; HR approves one into `devices` (choosing the branch). No punches are stored for a pending SN.
 - `device_commands`* (id, device_id, command_type ENUM('create_user','update_user','delete_user','list_users','sync_time','clear_attlog',
   'reboot'), payload JSON, status ENUM('queued','sent','done','failed'), result JSON, created_by, created_at, sent_at, done_at).
-- `device_logs`* (id, device_id, direction, endpoint, http_code, records, message, created_at) - 30 days, purged by cron.
+- `device_logs`* (id, device_id, direction, endpoint, http_code, records, message, created_at; step 5 adds `branch_id` and `ip`; `device_id`
+  and `branch_id` are NULL for calls that failed authentication) - 30 days, purged by cron.
 
 ### Cross-cutting
 `audit_log` (id, branch_id, user_id, module, record_id, action, old_values JSON, new_values JSON, ip, created_at; indexes
@@ -732,8 +736,63 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
   `export`). At most 1000 employees per report, three queries (G5).
 - Layout: a page passes `$page_vendor_css` / `$page_vendor_js` (theme-relative paths) to load a plugin only where it is used
   (fullcalendar + moment on the calendar).
-- Deferred on purpose: **Unmatched punches** linking page, punch import, device pages (step 5); `Payroll_missing_rows_test` (step 9,
-  it needs the payroll calculator; the day-close half of P1 is `Day_close_test`).
+- Deferred on purpose: `Payroll_missing_rows_test` (step 9, it needs the payroll calculator; the day-close half of P1 is `Day_close_test`).
+  (The unmatched-punches page, the closed-day list, the import and the device pages came in step 5.)
+
+### Devices (build step 5)
+- **Migrations 019 / 020.** 019 creates the five device tables; 020 makes `attendance_punches.device_id` a foreign key (`fk_punches_device`).
+  Nothing but the demo seed could write a device id before this step, so 020 first clears a `device_id` that has no `devices` row.
+- **Who is calling (`Device_auth`).** Windows Service: key from `X-API-Key`, `Authorization: Bearer` or `?api_key=`; the lookup is by
+  `sha256(key)` confirmed with `hash_equals`; revoked key / inactive branch refused; `last_used_at` at most once a minute; **20 failed
+  checks per IP and minute lock that IP for the rest of the minute (429, even for a valid key)**. Device of a call: the one the key is
+  bound to, else the `windows_service` device of the key's branch with the payload's `device_name` (created on first sight, at most 50
+  per branch, so a branch-wide key needs no setup per PC); a name that belongs to an ADMS device is 409, a disabled device 403.
+  ADMS: serial number `[A-Za-z0-9_-]{3,40}` (else 400, nothing touched); 600 calls per IP and 120 per SN and minute (429); only approved
+  serial numbers are served, **an unknown one gets the normal handshake text and `OK` on getrequest but HTTP 403 on every upload**
+  (the device keeps its data until HR approves it) and is remembered in `devices_pending` (capped at 50, purged after 30 days).
+  Approving a pending device (`devices_manage`; only the system Admin may pick another branch) can restrict it to the address it called
+  from (`allowed_ips`, default on); a call from another address is refused 403 and shown on the Devices page as `blocked_ip`, where HR
+  confirms it ("allow this address" adds it to `allowed_ips`). `allowed_ips` also applies to Windows Service devices when set.
+- **`Api::pull_from_machine`** (route `api/v1/pull_attendance`): POST only (405), body <= 8 MB (413), valid JSON (400), at most 10 000
+  records. `{"test": true}` -> `Connection OK` without registering a device. Answer: `processed` = records - invalid, `accepted` =
+  stored + already stored, plus `invalid`, `unmatched` and `commands`. Every storage failure or exception is **HTTP 500 and nothing is
+  stored**; `last_upload_at` moves only on success. `Service_payload` is the pure parser; ids a payload claims for itself are read **only**
+  by `Service_payload::claimed_branches()` (a library outside the P3 static scan) and only to write "ignored" into `device_logs`.
+- **`Iclock`**: `cdata` (GET handshake; POST `table=ATTLOG` stores punches, any other table is acknowledged `OK` and dropped; body <= 2 MB),
+  `getrequest` (heartbeat, `INFO=` gives the firmware, commands as `C:<id>:<COMMAND>` lines), `devicecmd` (results). `Adms_protocol` is
+  the pure parser: PIN 1-9 digits, date and time in one or two columns, tabs or spaces, junk lines counted in `device_logs`.
+- **Time zones.** A device without a timezone delivers branch local time. With `devices.timezone` set, punch times are converted to the
+  branch's timezone before they are stored (the file import too).
+- **Clock drift** is an estimate: a push of at most 3 punches (realtime) compares its latest punch time with the server clock and keeps the
+  difference when it is within 6 h; a backlog says nothing. The Windows Service reports its PC's time, not the device's, so it gives none.
+  `sync_time` is sent as `SET OPTIONS DateTime=...`, which is firmware dependent: check it on your model (the result is recorded).
+- **Command queue** (`Device_command_queue`): Windows Service devices take `create_user`, `update_user`, `delete_user`, `list_users`; ADMS
+  devices also `sync_time`, `clear_attlog`, `reboot`. `create/update/delete` need a numeric PIN; the name is cut to 24 characters, the device
+  password to 8 digits, `role` is 0 or 14. An identical queued command is not queued twice. queued -> sent (when delivered, inside one
+  transaction) -> done / failed (the result must come from the same device); a command **sent but unanswered for 30 minutes becomes
+  failed**. HR queues by hand (`devices_commands`: PIN and name come from the employee, never from the form), **Enrol on device** is on the
+  employee's PIN tab (`devices_commands`), and **recording an exit queues `delete_user` on every active device of the branch**. The device
+  password is never shown in the command list or the audit trail.
+- **Keys** (`devices_keys`): created for the working branch (optionally one device of it), `hrmk_` + 40 hex characters shown **once** in the
+  answer of the create call, only the hash and the last 4 characters are stored, revocable (`audit_log`: create / revoke, never the key).
+- **Health** (`Devices_model::health`): green < 10 min since the last call, yellow < 60 min, red; drift > 5 min; `cron device_health`
+  (every 15 min) sets **`lost_punch_alert` when the device uploaded nothing for `device_gap_hours` and a shift of an employee of its branch
+  began in that silence** (uses `Shift_calculator::plan` over the last 3 days; a device that never uploaded counts from its creation; a
+  disabled device is skipped); a batch with punches clears the flag at once. "Employees with a single punch" is the existing
+  **Missing check-out** filter (same rows), not a second list.
+- **Unmatched punches** (`attendance_punches`): punches without an employee grouped by PIN (last 30 days by default, at most 92), with
+  **Link PIN** (`attendance_punches` **and** `employees_edit`): the employee gets the PIN with the normal PIN rules (`Employees_model::assign_pin`)
+  starting at the later of the join date and the first unmatched punch, then `reprocess_unmatched` gives the stored punches their owner and
+  rebuilds the days; punches before the PIN's start stay unmatched.
+- **Punches for closed days** (`attendance_punches`): non-ignored punches inside a **locked** day that the day does not show (before its first or
+  after its last punch, or the day has no punches); night shifts that cross midnight are not matched. Read only - nothing changes a closed day.
+- **Import punches** (`attendance_import`): `.dat` / `.txt` (the USB export, same line format as ADMS) or `.csv` (pin, date and time in one column or
+  two, optional state and verify mode, header optional, `;` `,` or tab; UI date format or `Y-m-d`), UTF-8 without NUL bytes, <= 8 MB, <= 50 000
+  rows. The form needs the **device the file came from** (its id makes a punch unique, so importing twice, or a file whose punches the service
+  already delivered, changes nothing). Step 1 parses and shows counts, period, PINs that match nobody and a sample, writing only a random-named
+  file under `uploads/import/` (1 hour, only for the same user and branch); step 2 ingests it in chunks of 5000 with source `import` and audits it.
+- **Permissions.** `devices_view` list + call log; `devices_manage` add / edit / delete / approve / allow address; `devices_keys` keys;
+  `devices_commands` queue + enrol; `attendance_punches` unmatched + closed-day lists; `attendance_import` import. `Api` / `Iclock` map to `@device`.
 
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
@@ -901,7 +960,7 @@ regenerating or editing a past month uses the current structure.
 3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests. *(done)*
 4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14). *(done)*
 5. Devices: `Api::pull_from_machine` (Windows Service contract) and `Iclock` (ADMS), device keys, devices page, pending SNs, unmatched punches,
-   command queue, health + lost-punch detection, USB/CSV import (P3, P16, P17).
+   command queue, health + lost-punch detection, USB/CSV import (P3, P16, P17). *(done)*
 6. Leave: types, allocations (bulk), apply/approve/cancel, balance, carry-forward cron, reports (P10).
 7. Overtime source setting + requests/approval (P2, P13).
 8. Money accounts; advances (disburse, repay); loans (schedule, pay) (P9).
@@ -919,6 +978,13 @@ regenerating or editing a past month uses the current structure.
   `Admin_flow_test` (HTTP: landing page, branch switch, logo upload, CSRF on lists, by-id 403).
 - **Time tests (step 3):** `Shift_calculator_test` (metrics + plan precedence + query budget), `Shifts_test` (incl. assignments),
   `Rosters_test`, `Holidays_test`, `Time_flow_test` (HTTP: roster grid/save/import, view vs schedule permissions, default shift).
+- **Device tests (step 5):** `Adms_parser_test` (tabs, spaces, split date/time, junk lines, handshake, command lines, service JSON, USB/CSV files),
+  `Service_contract_test` (test ping, heartbeat, batch, resend = one row, **HTTP 500 and nothing stored on a DB error**, commands round trip, which
+  device a key means), `Branch_scope_test` (P3: a record with another branch id is saved to the key's branch, ADMS in the device's branch),
+  `Device_auth_test` (P17: hashed keys, revoked key 401, throttle, unknown serial stores nothing and cannot flood the list, allowed addresses,
+  rate limit, ADMS command round trip), `Device_health_test` (colours, drift, lost-punch rule, cron output), `Devices_flow_test` (HTTP: permissions,
+  CRUD, keys shown once, approve pending, commands, enrol, exit queues delete_user, call log, branch scope), `Punch_review_test` (unmatched list,
+  link PIN, closed-day list), `Punch_import_test` (preview writes nothing, import idempotent, CSV, tokens).
 - **Attendance tests (step 4):** `Punch_ingestion_test` (P4, P5: breaks, debounce, re-send no-op, unmatched then linked, reused PIN,
   night shift, manual row kept until rebuild), `Punch_ingestion_atomicity_test` (a forced failure stores nothing), `Day_close_test`
   (P1: Holiday > Weekly Off > Absent, gaps only, join/exit, never today, missing check-out), `Attendance_test` (mark, bulk, approve,

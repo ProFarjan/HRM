@@ -166,6 +166,19 @@ $field = function ($label, $value) {
 						<button type="submit" class="btn btn-primary"><?= e(t('emp_change_pin')) ?></button>
 					</form>
 					<?php endif; ?>
+					<?php if ($current && $emp['device_pin'] !== NULL && $devices): ?>
+					<h4><?= e(t('dev_enrol')) ?></h4>
+					<form id="enrol-form" class="hrm-ajax-form" method="post" data-message="<?= e(t('dev_enrol_queued')) ?>" action="<?= site_url('employees/enrol_device/' . $id) ?>">
+						<div class="form-group"><?php foreach ($devices as $did => $dname): ?><label class="checkbox-inline"><input type="checkbox" name="device_ids[]" value="<?= (int) $did ?>" class="no-icheck"> <?= e($dname) ?></label><?php endforeach; ?></div>
+						<div class="form-inline">
+							<input type="text" name="device_password" class="form-control" maxlength="8" inputmode="numeric" placeholder="<?= e(t('dev_password')) ?>" autocomplete="off">
+							<input type="text" name="card_no" class="form-control" maxlength="12" inputmode="numeric" placeholder="<?= e(t('dev_card')) ?>" autocomplete="off">
+							<label class="checkbox-inline"><input type="checkbox" name="device_admin" value="1" class="no-icheck"> <?= e(t('dev_admin_role')) ?></label>
+							<button type="submit" class="btn btn-default" id="enrol-save"><i class="fa fa-hdd-o"></i> <?= e(t('dev_enrol')) ?></button>
+						</div>
+						<p class="help-block"><?= e(t('dev_enrol_help')) ?></p>
+					</form>
+					<?php endif; ?>
 					<h4><?= e(t('emp_pin_history')) ?></h4>
 					<table class="table table-condensed" id="pin-history">
 						<thead><tr><th><?= e(t('emp_device_pin')) ?></th><th><?= e(t('emp_valid_from')) ?></th><th><?= e(t('emp_valid_to')) ?></th></tr></thead>

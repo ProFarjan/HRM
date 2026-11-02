@@ -41,6 +41,67 @@
 			$('#punches-filter input[name=unmatched]').on('change', function () { $p.DataTable().ajax.reload(); });
 		}
 
+		var $u = $('#unmatched-table');
+		if ($u.length) {
+			HRM.table('#unmatched-table', [
+				{ data: 'pin' }, { data: 'count' }, { data: 'first', orderable: false }, { data: 'last', orderable: false }, { data: 'devices', orderable: false },
+				{ data: null, orderable: false, render: function (row) {
+					return $u.data('can-link') ? '<button type="button" class="btn btn-xs btn-primary link-pin" data-pin="' + $('<div>').text(row.raw_pin).html() + '"><i class="fa fa-link"></i></button>' : '';
+				} }
+			], '#unmatched-filter', { order: [[1, 'desc']] });
+			if ($.fn.select2) { $('#link-employee').select2({ dropdownParent: $('#link-modal') }); }
+			$(document).on('click', '.link-pin', function () {
+				$('#link-pin').val($(this).data('pin'));
+				$('#link-pin-label').text($(this).data('pin'));
+				$('#link-modal').modal('show');
+			});
+		}
+
+		if ($('#closed-table').length) {
+			HRM.table('#closed-table', [
+				{ data: 'when' }, { data: 'employee', orderable: false }, { data: 'pin' }, { data: 'device' }, { data: 'source' }, { data: 'day', orderable: false }
+			], '#closed-filter', { order: [[0, 'desc']] });
+		}
+
+		// import punches: preview first (nothing is written), then confirm
+		var $imp = $('#import-form');
+		if ($imp.length) {
+			var row = function (label, value) { return $('<tr>').append($('<th>').text(label), $('<td>').text(value)); };
+			$imp.on('submit', function (e) {
+				e.preventDefault();
+				var $btn = $('#import-preview').prop('disabled', true);
+				$.ajax({ url: $imp.attr('action'), type: 'POST', data: new window.FormData(this), processData: false, contentType: false, dataType: 'json' })
+					.done(function (r) {
+						if (!r.ok) { window.toastr.error($('<div>').text(r.message).html().replace(/\n/g, '<br>')); $('#preview-box').hide(); return; }
+						var L = window.HRM_LABELS || {};
+						$('#preview-summary').empty().append(
+							row(L.device || 'Device', r.device), row(L.rows || 'Rows', r.rows), row(L.valid || 'Valid punches', r.valid), row(L.invalid || 'Invalid rows', r.invalid),
+							row(L.range || 'Period', r.from + ' - ' + r.to), row(L.newp || 'New', r.new), row(L.already || 'Already stored', r.already)
+						);
+						var $list = $('#preview-unmatched-list').empty();
+						$.each(r.unmatched, function (i, u) { $list.append($('<span class="label label-warning" style="margin-right:4px;display:inline-block">').text(u.pin + ' (' + u.punches + ')')); });
+						$('#preview-unmatched').toggle(r.unmatched_total > 0);
+						$('#preview-sample').empty();
+						$.each(r.sample, function (i, s) { $('#preview-sample').append($('<tr>').append($('<td>').text(s.pin), $('<td>').text(s.at))); });
+						$('#commit-token').val(r.token);
+						$('#preview-box').show();
+					})
+					.fail(function (xhr) { if (xhr.status !== 401 && xhr.status !== 403) { window.toastr.error('Error'); } })
+					.always(function () { $btn.prop('disabled', false); });
+			});
+			$('#commit-form').on('submit', function (e) {
+				e.preventDefault();
+				var $btn = $('#import-commit').prop('disabled', true);
+				$.ajax({ url: $(this).attr('action'), type: 'POST', data: { token: $('#commit-token').val() }, dataType: 'text' }).done(function (text) {
+					if (!HRM.ok(text)) { return; }
+					var n = String(text).split('<<<###>>>')[1].split('/');
+					window.toastr.success(String($('#commit-form').data('done') || '%d new, %d already stored, %d unmatched').replace(/%d/g, function () { return n.shift() || '0'; }));
+					$('#preview-box').hide();
+					$imp[0].reset();
+				}).always(function () { $btn.prop('disabled', false); });
+			});
+		}
+
 		var $cal = $('#attendance-calendar');
 		if ($cal.length && $.fn.fullCalendar) {
 			$cal.fullCalendar({

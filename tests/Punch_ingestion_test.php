@@ -24,7 +24,7 @@ class Punch_ingestion_test extends Hrm_test_case
         $shift = $this->insert_shift('DAY', '09:00:00', '18:00:00', array('grace_time' => 10, 'working_hours' => 8));
         $this->emp = $this->insert_employee('P101', array('device_pin' => '101', 'device_pin_from' => '2024-01-01'));
         $this->assign_shift($this->emp, $shift);
-        $this->device = array('branch_id' => current_branch_id(), 'device_id' => 7, 'source' => 'device_service');
+        $this->device = array('branch_id' => current_branch_id(), 'device_id' => $this->insert_device('Gate 7'), 'source' => 'device_service');
     }
 
     protected function punches(array $times, $pin = '101', array $states = array())

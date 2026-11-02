@@ -10,10 +10,11 @@ server-side DataTables, MySQL 5.7+ / MariaDB 10.3+ (InnoDB, utf8mb4). One databa
 **[CLAUDE.md](CLAUDE.md) is the specification** (architecture, guardrails G1-G8, domain model, business rules, device
 integration, permissions, the defect register P1-P20 and the build order). Read it before changing anything.
 
-Status: build steps 0-4 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
+Status: build steps 0-5 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
 designations, employees with salary history, documents, device PIN history; shifts, shift assignments, roster, holidays,
 `Shift_calculator`; attendance punches, `Punch_ingestor`, manual / bulk / self marking, approval, rebuild, day close cron,
-calendar, daily and monthly reports). Business modules arrive
+calendar, daily and monthly reports; devices: Windows Service and ADMS endpoints, keys, pending devices, commands, health,
+unmatched punches, USB / CSV import). Business modules arrive
 step by step, see "Build order" in CLAUDE.md.
 
 ## Requirements
@@ -55,12 +56,32 @@ php index.php migrate                                                          #
 ```cron
 30 0  * * *    php /path/to/hrm/index.php cron attendance_close       # day close, yesterday          (available now)
 10 0  1 1 *    php /path/to/hrm/index.php cron leave_carry_forward    # year-end carry forward         (build step 6)
-*/15 * * * *   php /path/to/hrm/index.php cron device_health          # stale devices, lost punches    (build step 5)
+*/15 * * * *   php /path/to/hrm/index.php cron device_health          # stale devices, lost punches    (available now)
 15 3  * * *    php /path/to/hrm/index.php cron housekeeping           # purge technical rows           (available now)
 ```
 
 `cron` and `migrate` are command-line only: over HTTP they answer 404. Each job loops over the configured tenants
 (or only `TENANT_DB`). Jobs marked with a build step are added by that step.
+
+## Attendance devices
+
+Two ways in; both end in the same idempotent punch ingestion (a punch that is sent twice is stored once).
+
+**ZKTeco Windows Service** (pull; `ProFarjan/ZKTeco-Windows-Service`): create a key under *Devices > API keys* (shown once), then in the
+service settings use this server's `https://<host>/api/v1/pull_attendance` and the key as `api_key` (header `X-API-Key`). Also set
+`save_failed_requests: true`, `retry_on_failure: true`, `max_retry_attempts >= 3` and keep its `logs/` and failed-request folders on a disk that
+is not wiped: the service clears the device after a sync even when the upload failed, and the server cannot change that. The server answers
+HTTP 500 whenever punches were not stored, so the service keeps them. Try it:
+
+```bash
+curl -X POST https://<host>/api/v1/pull_attendance -H "X-API-Key: hrmk_..." -d '{"test": true}'     # {"status":"success","message":"Connection OK"}
+```
+
+**ADMS push** (the device calls the server): on the device set the cloud server to `<host>` (port 80/443 as served) and the path is `/iclock/cdata`.
+The device's serial number appears under *Devices > Unknown devices*; approve it into a branch. A serial number is not a secret, so serve
+`/iclock/*` on a separate virtual host or port that a firewall or VPN restricts to the offices' addresses, and keep the allowed-address option
+on. `php index.php cron device_health` flags devices that went silent while a shift began ("possible lost punches"); lost punches can be put back
+from the device's USB export under *Attendance > Import punches*.
 
 ## Tests and static checks
 
@@ -83,6 +104,8 @@ HRM_ADMIN_PASSWORD=... node tests/e2e/organisation_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/time_pages.js
 TENANT_DB=hrm_dev php tests/e2e/seed_attendance.php                                 # demo punches (re-run resets them)
 HRM_ADMIN_PASSWORD=... node tests/e2e/attendance_pages.js
+TENANT_DB=hrm_dev php tests/e2e/seed_devices.php                                    # demo devices, a pending serial number, a closed day
+HRM_ADMIN_PASSWORD=... node tests/e2e/devices_pages.js
 ```
 
 The test bootstrap boots CodeIgniter against **`hrm_test`** (it refuses any database whose name does not end in `_test`),
@@ -96,10 +119,11 @@ user without permissions is 403), `Input_validator_test`. The HTTP tests start `
 application/config      config, database(.example), hrm (setting defaults), permissions (catalog), menu (sidebar)
 application/core        MY_Controller (default-deny _remap), Ess_Controller, Api_Controller, MY_Model, Default_deny, hrm_autoload
 application/controllers Auth, Cron, Dashboard, Users, Roles, Branches, Settings, Audit, Employees, Departments, Designations,
-                        Shifts, Employee_shifts, Rosters, Holidays, Attendance, Reports
+                        Shifts, Employee_shifts, Rosters, Holidays, Attendance, Reports, Devices,
+                        Api (Windows Service JSON), Iclock (ADMS push)
 application/models      all SQL lives here
 application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration, Shift_calculator,
-                        Punch_ingestor
+                        Punch_ingestor, Device_auth, Device_command_queue, Adms_protocol, Service_payload, Punch_file_parser, Rate_limiter
 application/helpers     hrm (settings, dates, money), permission, sequence
 application/migrations  NNN_name.php, sequential, idempotent, working down()
 theme/                  AdminLTE 2 and plugins as plain files, theme/js/app.js (CSRF, iCheck, idle logout)

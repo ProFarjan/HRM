@@ -27,9 +27,17 @@ class Attendance extends MY_Controller
         'save_bulk'       => 'attendance_bulk',
         'punches'         => 'attendance_punches',
         'punches_list'    => 'attendance_punches',
+        'unmatched'       => 'attendance_punches',
+        'unmatched_list'  => 'attendance_punches',
+        'link_pin'        => 'attendance_punches',
+        'closed_punches'  => 'attendance_punches',
+        'closed_list'     => 'attendance_punches',
+        'import'          => 'attendance_import',
+        'import_preview'  => 'attendance_import',
+        'import_commit'   => 'attendance_import',
     );
     protected $post_only = array('ajax_list', 'calendar_events', 'save_mark', 'add_punch', 'save_my_day', 'update', 'rebuild', 'delete',
-        'approve', 'reject', 'save_bulk', 'punches_list');
+        'approve', 'reject', 'save_bulk', 'punches_list', 'unmatched_list', 'link_pin', 'closed_list', 'import_preview', 'import_commit');
 
     public function __construct()
     {
@@ -185,6 +193,82 @@ class Attendance extends MY_Controller
             return;
         }
         $this->json($result);
+    }
+
+    // ------------------------------------------------------------------------------------------------ punch review + import (step 5)
+
+    /** punches whose PIN belongs to nobody: HR links the PIN to an employee here */
+    public function unmatched()
+    {
+        $this->load->model('Employees_model');
+        $this->data['active_menu'] = 'attendance/unmatched';
+        $this->data['page_title'] = t('att_unmatched_page');
+        $this->render('attendance/unmatched', array(
+            'employees' => has_permission('employees_edit') ? $this->Employees_model->active_list() : array(),
+            'from_date' => show_date(date('Y-m-d', strtotime(today_local() . ' -29 days'))), 'to_date' => show_date(today_local()), 'page_js' => array('attendance'),
+        ));
+    }
+
+    public function unmatched_list()
+    {
+        $this->release_session_lock();
+        $this->load->model('Punch_review_model');
+        $result = $this->Punch_review_model->unmatched_page();
+        if (isset($result['error'])) {
+            $this->text($result['error'], 422);
+            return;
+        }
+        $this->json($result);
+    }
+
+    /** the PIN goes to the employee (the normal PIN rules), then its stored punches are processed */
+    public function link_pin()
+    {
+        $this->require_permission('employees_edit');
+        $this->load->model('Punch_review_model');
+        $this->text($this->Punch_review_model->link());
+    }
+
+    /** punches that a locked (closed) day does not show */
+    public function closed_punches()
+    {
+        $this->data['active_menu'] = 'attendance/closed_punches';
+        $this->data['page_title'] = t('att_closed_page');
+        $this->render('attendance/closed_punches', array(
+            'from_date' => show_date(date('Y-m-d', strtotime(today_local() . ' -29 days'))), 'to_date' => show_date(today_local()), 'page_js' => array('attendance'),
+        ));
+    }
+
+    public function closed_list()
+    {
+        $this->release_session_lock();
+        $this->load->model('Punch_review_model');
+        $result = $this->Punch_review_model->closed_page();
+        if (isset($result['error'])) {
+            $this->text($result['error'], 422);
+            return;
+        }
+        $this->json($result);
+    }
+
+    public function import()
+    {
+        $this->load->model('Devices_model');
+        $this->data['active_menu'] = 'attendance/import';
+        $this->data['page_title'] = t('att_import');
+        $this->render('attendance/import', array('devices' => $this->Devices_model->options(), 'page_js' => array('attendance')));
+    }
+
+    public function import_preview()
+    {
+        $this->load->model('Punch_import_model');
+        $this->json($this->Punch_import_model->preview());
+    }
+
+    public function import_commit()
+    {
+        $this->load->model('Punch_import_model');
+        $this->text($this->Punch_import_model->commit());
     }
 
     /** the employee is in the branch and (without show_all_attendance) is the user or in a department they head */

@@ -345,6 +345,33 @@ class Input_validator
         return $this->fail($name, sprintf($this->t('v_upload_sheet_type', '%s must be an .xlsx or .csv file.'), $this->label($name)));
     }
 
+    /**
+     * Upload of a device's punch export: a UTF-8 text file (.dat / .txt as the USB export of a ZKTeco device, or .csv), no NUL bytes,
+     * at most $max_kb. Returns array('tmp' => path, 'ext' => dat|txt|csv).
+     */
+    public function punch_file($name, $max_kb = 8192, $required = TRUE)
+    {
+        $file = isset($_FILES[$name]) ? $_FILES[$name] : NULL;
+        if ( ! is_array($file) || ! isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : NULL;
+        }
+        if ( ! is_array($file['error']) && in_array($file['error'], array(UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE), TRUE)) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        if (is_array($file['error']) || $file['error'] !== UPLOAD_ERR_OK || ! is_uploaded_file($file['tmp_name'])) {
+            return $this->fail($name, sprintf($this->t('v_upload', '%s could not be uploaded.'), $this->label($name)));
+        }
+        if ((int) $file['size'] > $max_kb * 1024) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        $all = in_array($ext, array('dat', 'txt', 'csv'), TRUE) ? (string) file_get_contents($file['tmp_name']) : NULL;
+        if ($all !== NULL && strpos($all, "\0") === FALSE && mb_check_encoding(preg_replace('/^\xEF\xBB\xBF/', '', $all), 'UTF-8')) {
+            return array('tmp' => $file['tmp_name'], 'ext' => $ext);
+        }
+        return $this->fail($name, sprintf($this->t('v_upload_punch_type', '%s must be a .dat, .txt or .csv text file.'), $this->label($name)));
+    }
+
     /** list of ids (checkbox groups / bulk actions), at most $max_count entries, each >= 1, de-duplicated */
     public function int_list($name, $max_count = 1000, $required = TRUE)
     {

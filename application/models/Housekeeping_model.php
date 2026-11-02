@@ -14,6 +14,7 @@ class Housekeeping_model extends MY_Model
         $deleted['login_attempts'] = $this->delete_before('login_attempts', 'attempted_at', 2);
         $deleted['rate_limits'] = $this->delete_before('rate_limits', 'window_start', 1);
         $deleted['device_logs'] = $this->table_present('device_logs') ? $this->delete_before('device_logs', 'created_at', 30) : 0;
+        $deleted['devices_pending'] = $this->table_present('devices_pending') ? $this->delete_before('devices_pending', 'last_seen_at', 30) : 0;
         return $deleted;
     }
 

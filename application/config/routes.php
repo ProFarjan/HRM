@@ -54,6 +54,7 @@ $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;
 
 // Friendly entry points
+$route['api/v1/pull_attendance'] = 'api/pull_from_machine';        // ZKTeco Windows Service contract
 $route['login'] = 'auth/login';
 $route['logout'] = 'auth/logout';
 
