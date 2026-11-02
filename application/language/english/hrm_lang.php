@@ -712,3 +712,26 @@ $lang['ins_emp_avg'] = 'Usually arrives at %s and leaves at %s; works %s hours o
 $lang['ins_emp_ot'] = '%s overtime hours on %d day(s).';
 $lang['ins_emp_missing'] = 'The check-out is missing on %d day(s).';
 $lang['rep_absent_days'] = 'Absent';
+
+// ---- Split shifts (several duty periods in a day)
+$lang['shift_split'] = 'Split';
+$lang['shift_split_label'] = 'Split shift (more than one duty period in a day)';
+$lang['shift_split_help'] = 'For staff who work in parts, e.g. 10:00-14:00 and 18:00-22:00. Worked time is the sum of the periods; the gap between them is not paid time and never counts as late, early leave or overtime.';
+$lang['shift_periods'] = 'Duty periods';
+$lang['shift_period_add'] = 'Add period';
+$lang['shift_period_remove'] = 'Remove period';
+$lang['shift_periods_help'] = 'Periods must follow each other in time with a gap between them; the last one may run past midnight. Late is measured against the start of each period, early leave against its end.';
+$lang['shift_periods_count'] = 'A split shift needs two to four duty periods, each with a start and an end.';
+$lang['shift_period_empty'] = 'Duty period %d starts and ends at the same time.';
+$lang['shift_period_gap'] = 'Duty period %d must start after the previous one has ended (leave a gap).';
+$lang['shift_periods_span'] = 'All duty periods must fit within 24 hours of the first start.';
+$lang['att_period'] = 'Period';
+$lang['att_split_shift'] = 'This employee is on a split shift: enter the check-in and check-out of each duty period (leave a time empty when nothing was punched).';
+$lang['att_periods_help'] = 'A period with a check-in but no check-out counts no hours; an empty period counts none. The gap between periods is never counted.';
+$lang['att_period_out_without_in'] = 'Duty period %d has a check-out but no check-in.';
+$lang['rep_reason'] = 'Reason';
+$lang['rep_reason_no_out'] = 'No check-out';
+$lang['rep_reason_period_missed'] = 'Duty period %d: no punches';
+$lang['rep_reason_period_open'] = 'Duty period %d: no check-out';
+$lang['ins_incomplete'] = '%d day(s) have a duty period with no punches or no check-out. See the Missing check-out report.';
+$lang['ins_emp_incomplete'] = 'A duty period is incomplete on %d day(s).';

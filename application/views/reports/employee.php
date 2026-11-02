@@ -58,7 +58,7 @@ $row_class = array('Present' => '', 'Half-day' => 'warning', 'Absent' => 'danger
 						<?php foreach ($report['days'] as $d => $day): $r = $day['row']; $plan = $day['plan']; $off = ! $r && $plan && $plan['employed']; ?>
 							<tr class="<?= $r ? $row_class[$r['status']] : ($off && $plan['day_type'] === 'holiday' ? 'holiday' : ($off && $plan['day_type'] === 'weekly_off' ? 'weekoff' : '')) ?>">
 								<td><?= e(show_date($d)) ?></td><td><?= e(date('D', strtotime($d))) ?></td>
-								<td><?= $r && $r['shift_name'] ? e($r['shift_name']) . ' <small class="text-muted">' . e(substr($r['shift_start'], 0, 5) . '-' . substr($r['shift_end'], 0, 5)) . '</small>' : '' ?></td>
+								<td><?= $r && $r['shift_name'] ? e($r['shift_name']) . ((int) $r['shift_split'] === 1 ? ' <span class="label label-info">' . e(t('shift_split')) . '</span>' : ' <small class="text-muted">' . e(substr($r['shift_start'], 0, 5) . '-' . substr($r['shift_end'], 0, 5)) . '</small>') : '' ?></td>
 								<td>
 									<?php if ($r): ?>
 										<?= Attendance_model::status_label($r['status']) ?><?= $r['approval_status'] !== 'Approved' ? ' <small class="text-muted">' . e(t('att_approval_' . strtolower($r['approval_status']))) . '</small>' : '' ?>
@@ -68,8 +68,14 @@ $row_class = array('Present' => '', 'Half-day' => 'warning', 'Absent' => 'danger
 									<?php elseif ($plan && $plan['day_type'] === 'weekly_off'): ?><?= Attendance_model::status_label('Weekly Off') ?>
 									<?php else: ?><span class="text-muted"><?= e($d >= today_local() ? t('rep_upcoming') : t('rep_no_row')) ?></span><?php endif; ?>
 								</td>
+								<?php $split = $r && ! empty($r['periods']) && count($r['periods']) > 1; ?>
+								<?php if ($split): ?>
+									<td><?php foreach ($r['periods'] as $period): ?><div class="<?= (int) $period['late_minutes'] > 0 ? 'text-red' : '' ?>"><?= $period['check_in'] === NULL ? '<span class="text-muted">-</span>' : e(substr($period['check_in'], 0, 5)) ?></div><?php endforeach; ?></td>
+									<td><?php foreach ($r['periods'] as $period): ?><div><?= $period['check_out'] === NULL ? '<span class="' . ($period['check_in'] === NULL ? 'text-muted' : 'text-yellow') . '">' . ($period['check_in'] === NULL ? '-' : '?') . '</span>' : e(substr($period['check_out'], 0, 5)) ?></div><?php endforeach; ?></td>
+								<?php else: ?>
 								<td><?= $r ? e(substr((string) $r['check_in'], 0, 5)) : '' ?></td>
 								<td><?= $r && in_array($r['status'], array('Present', 'Half-day'), TRUE) && $r['check_out'] === NULL && $r['check_in'] !== NULL ? '<span class="text-yellow">?</span>' : ($r ? e(substr((string) $r['check_out'], 0, 5)) : '') ?></td>
+								<?php endif; ?>
 								<td class="text-right"><?= $r && (int) $r['break_minutes'] ? (int) $r['break_minutes'] : '' ?></td>
 								<td class="text-right"><?= $r && (float) $r['working_hours'] > 0 ? e(number_format((float) $r['working_hours'], 2)) : '' ?></td>
 								<td class="text-right<?= $r && (int) $r['late_minutes'] ? ' text-red' : '' ?>"><?= $r && (int) $r['late_minutes'] ? (int) $r['late_minutes'] : '' ?></td>
