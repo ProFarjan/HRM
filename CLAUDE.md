@@ -700,6 +700,41 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
   taken dates skipped).
 - Settings: `default_shift_id` on the Attendance tab (any active shift; it only applies in its own branch).
 
+### Attendance (build step 4)
+- **Punches** (`attendance_punches`, migration 017): `device_id` stays without a foreign key until `devices` exists (step 5) and is NULL
+  for manual punches; NULL never collides in a unique key, so a manual punch is refused as a duplicate by (employee, `punch_at`) inside
+  the ingestor. `device_pin` is NULL for manual punches of an employee without a PIN.
+- **`Punch_ingestor::ingest($punches, $device)`** (`$device` = `branch_id`, `device_id`, `source`, `created_by`; the branch comes only
+  from it) returns counts (stored, duplicates, ignored, unmatched, invalid, rebuilt, kept_manual, locked). One `Tx::run()` per batch.
+  Owner of a PIN on the punch date: `employees.device_pin` from `device_pin_from`, else `employee_pin_history` (set-based, one query).
+  `reprocess_unmatched($branch, $pin)` attaches stored unmatched punches after HR sets the PIN (the page arrives in step 5).
+- **Breaks:** when the punches carry explicit states (0 in / 1 out) an OUT followed by an IN is a break; with unknown states (255)
+  the punches alternate in/out from the first one; the last punch never opens a break. Night shift: a punch up to
+  `shift.end_time + 240 min` on the next calendar day belongs to the previous day (`Punch_ingestor::NIGHT_TAIL_MINUTES`).
+- **`attendance.source`**: `punch` (built from punches), `manual` (HR mark or edit), `self` (self-marked, Pending), `day_close`.
+  `rebuild_day()` overwrites only `punch` / `day_close` rows; `manual` / `self` rows are kept until HR clicks **Rebuild from punches**
+  (forced); locked rows are never touched (counted as `locked`; the **Punches for closed days** list arrives with the device pages in
+  step 5). A day whose punches are all gone loses its `punch` row.
+- **Mark** (`attendance_add`): Approved; not in the future; it may replace a `day_close` row (e.g. an Absent filled by the cron), any
+  other existing row is edited instead. **Add punch** on the mark page goes through the ingestor (source `manual`).
+  **My attendance today** (`attendance_mark_self`): the login's own employee, today only, Pending.
+- **Approve / reject** (`attendance_approve`): only Pending rows, re-checked under the row lock; a rejection needs a note; nobody decides
+  their own row except the system Admin. Seeing a row: your own, `show_all_attendance`, or being its department head (`scope_department`);
+  `Access_model` (by-id `belong_to`) applies the same own + headed-department rule, so a department head can approve their team.
+- **Bulk mark** (`attendance_bulk`): date + department (or all), active employees of that day; existing rows are skipped, or updated when
+  *overwrite* is ticked (never locked rows); the answer is "n created, n updated, n skipped".
+- **Day close** (`Day_close_model`, cron `attendance_close [Y-m-d] [dry-run]`): per tenant and active branch; "yesterday" and "never today"
+  are computed in the **branch's** timezone. Leave rows need the leave tables, so until step 6 a covered day is Absent (step 6 fills
+  `approved_leaves()`, approval turns those rows into Leave). Step 6 note: when punches arrive for a `Leave` day the rebuild currently
+  makes it Present - leave approval must check punches (see "Leave").
+- **Reports** (`Reports`): daily and monthly grid need `attendance_report` (rows of the branch, plus `scope_department` without
+  `show_all_attendance`); the Excel downloads need `export_hr` as well and are written to `audit_log` (module `reports`, action
+  `export`). At most 1000 employees per report, three queries (G5).
+- Layout: a page passes `$page_vendor_css` / `$page_vendor_js` (theme-relative paths) to load a plugin only where it is used
+  (fullcalendar + moment on the calendar).
+- Deferred on purpose: **Unmatched punches** linking page, punch import, device pages (step 5); `Payroll_missing_rows_test` (step 9,
+  it needs the payroll calculator; the day-close half of P1 is `Day_close_test`).
+
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
   history, documents, device PIN + **Enrol on device** -> queues `create_user`), profile (attendance, leave balance, advances, loans,
@@ -864,7 +899,7 @@ regenerating or editing a past month uses the current structure.
 1. Auth (login, `password_hash`, throttle, idle logout), roles/permissions, branches, settings, layout, audit log, migration runner per tenant. *(done)*
 2. Organisation: departments, designations, employees (documents, salary structure history, PIN + PIN history), users linked to employees. *(done)*
 3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests. *(done)*
-4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14).
+4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14). *(done)*
 5. Devices: `Api::pull_from_machine` (Windows Service contract) and `Iclock` (ADMS), device keys, devices page, pending SNs, unmatched punches,
    command queue, health + lost-punch detection, USB/CSV import (P3, P16, P17).
 6. Leave: types, allocations (bulk), apply/approve/cancel, balance, carry-forward cron, reports (P10).
@@ -884,6 +919,11 @@ regenerating or editing a past month uses the current structure.
   `Admin_flow_test` (HTTP: landing page, branch switch, logo upload, CSRF on lists, by-id 403).
 - **Time tests (step 3):** `Shift_calculator_test` (metrics + plan precedence + query budget), `Shifts_test` (incl. assignments),
   `Rosters_test`, `Holidays_test`, `Time_flow_test` (HTTP: roster grid/save/import, view vs schedule permissions, default shift).
+- **Attendance tests (step 4):** `Punch_ingestion_test` (P4, P5: breaks, debounce, re-send no-op, unmatched then linked, reused PIN,
+  night shift, manual row kept until rebuild), `Punch_ingestion_atomicity_test` (a forced failure stores nothing), `Day_close_test`
+  (P1: Holiday > Weekly Off > Absent, gaps only, join/exit, never today, missing check-out), `Attendance_test` (mark, bulk, approve,
+  locked rows), `Attendance_permission_test` (P14, HTTP), `Attendance_flow_test` (cron CLI, Excel export audited, calendar),
+  `Report_query_budget_test` (500 employees x 30 days <= 6 queries).
 - **Organisation tests (step 2):** `Organisation_units_test`, `Employees_test` (incl. masking and a real `scope_department`),
   `Employee_pin_test`, `Salary_structure_test`, `Organisation_flow_test` (HTTP: salary/sensitive permissions, documents, photo, branch 403).
 - **Behaviour tests:** `Shift_calculator_test` (normal, grace, night shift, holiday work); `Punch_ingestion_test`; `Day_close_test`;
