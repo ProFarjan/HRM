@@ -102,6 +102,45 @@
 			});
 		}
 
+		// mark / edit form: an employee on a split shift gets one in / out pair per duty period instead of a single pair
+		var $form = $('#attendance-form');
+		if ($form.length) {
+			var showPeriods = function (periods) {
+				var $box = $('#period-rows');
+				var signature = JSON.stringify($.map(periods || [], function (p) { return p.start + '-' + p.end; }));
+				if ($box.data('signature') === signature && $box.children().length === (periods || []).length) {
+					return toggleTimes();                                         // the same periods again: keep what has been typed
+				}
+				$box.data('signature', signature).empty();
+				$('#period-title').text($form.data('t-split'));
+				$.each(periods || [], function (i, p) {
+					var $row = $('<div class="row period-input-row" style="margin-bottom:6px">');
+					$row.append($('<div class="col-sm-4">').append($('<strong>').text($form.data('t-period') + ' ' + (i + 1)), $('<br>'), $('<small class="text-muted">').text(p.start + ' - ' + p.end)));
+					$row.append($('<div class="col-sm-4">').append($('<input type="time" name="seg_in[]" class="form-control">').val(p.in || '')));
+					$row.append($('<div class="col-sm-4">').append($('<input type="time" name="seg_out[]" class="form-control">').val(p.out || '')));
+					$box.append($row);
+				});
+				toggleTimes();
+			};
+			var lookups = 0;
+			var lookup = function () {
+				var url = $form.data('day-info-url');
+				var employee = $('#f_employee').val(), date = $('#f_date').val();
+				var mine = ++lookups;                                             // only the answer to the latest question counts
+				if (!url || !employee || !date) { return showPeriods(null); }
+				$.ajax({ url: url, type: 'POST', data: { employee_id: employee, attendance_date: date }, dataType: 'json' })
+					.done(function (r) { if (mine === lookups) { showPeriods(r && r.ok && r.split ? r.periods : null); } })
+					.fail(function () { if (mine === lookups) { showPeriods(null); } });
+			};
+			var existing = $form.data('periods');
+			if (existing && existing.length) {
+				showPeriods(existing);
+			} else {
+				$('#f_employee, #f_date').on('change', lookup);
+				$('#f_date').on('hide', lookup);
+			}
+		}
+
 		var $cal = $('#attendance-calendar');
 		if ($cal.length && $.fn.fullCalendar) {
 			$cal.fullCalendar({
@@ -117,8 +156,11 @@
 		// times only for worked days
 		function toggleTimes() {
 			var worked = ['Present', 'Half-day'].indexOf($('#f_status').val()) !== -1;
-			$('#time-fields').toggle(worked);
-			$('#time-fields').next('div').find('input[name=check_out]').closest('div').toggle(worked);
+			var split = $('#period-rows').children().length > 0;          // a split shift: one in / out pair per duty period
+			$('#time-fields').toggle(worked && !split).find('input').prop('disabled', split);
+			$('#period-fields').toggle(worked && split);
+			$('#single-times-help').toggle(!split);
+			$('#time-fields').next('div').find('input[name=check_out]').closest('div').toggle(worked && !split);
 		}
 		$('#f_status').on('change', toggleTimes);
 		if ($('#f_status').length) { toggleTimes(); }
