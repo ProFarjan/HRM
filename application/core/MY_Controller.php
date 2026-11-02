@@ -18,7 +18,7 @@ abstract class MY_Controller extends CI_Controller
 {
     use Default_deny;
 
-    /** method => permission key | '@any' | '@self' (Ess_Controller only) */
+    /** method => permission key | '@any' | '@system' (system Admin role only) | '@self' (Ess_Controller only) */
     protected $permission_map = array();
 
     /** methods that change data: POST only (405 otherwise) */
@@ -50,6 +50,11 @@ abstract class MY_Controller extends CI_Controller
         $key = $this->permission_map[$method];
         if ($key === '@self') {
             if ( ! $this->allow_self) {
+                $this->deny(403, $mode);
+            }
+        } elseif ($key === '@system') {
+            $user = current_user();
+            if (empty($user['is_system'])) {                      // the system Admin role only (e.g. switching branch)
                 $this->deny(403, $mode);
             }
         } elseif ($key !== '@any' && ! has_permission($key)) {
@@ -125,6 +130,19 @@ abstract class MY_Controller extends CI_Controller
             $this->session->set_userdata('last_activity', time());
         }
 
+        // The system Admin may work in another branch (header switcher); everyone else is fixed to their own branch.
+        $user['home_branch_id'] = $user['branch_id'];
+        $switched = (int) $this->session->userdata('branch_id');
+        if ($user['is_system'] && $switched > 0 && $switched !== $user['branch_id']) {
+            $branch = $this->Auth_model->active_branch($switched);
+            if ($branch) {
+                $user['branch_id'] = (int) $branch['id'];
+                $user['branch_name'] = $branch['name'];
+                $user['branch_timezone'] = $branch['timezone'];
+            } else {
+                $this->session->unset_userdata('branch_id');      // switched-to branch was deactivated: back home
+            }
+        }
         set_current_user($user);
 
         $timezone = $user['branch_timezone'] ? $user['branch_timezone'] : hr_setting('timezone', 'Asia/Dhaka');
@@ -153,6 +171,11 @@ abstract class MY_Controller extends CI_Controller
         $this->data['csrf_hash'] = $this->security->get_csrf_hash();
         $this->data['page_title'] = t('app_name');
         $this->data['active_menu'] = '';
+        $this->data['switch_branches'] = array();
+        if ( ! empty($user['is_system'])) {
+            $this->data['switch_branches'] = $this->Auth_model->active_branches();
+        }
+        $this->data['has_logo'] = (string) hr_setting('logo', '') !== '';
     }
 
     /** config/menu.php filtered by what this user may open */
@@ -188,6 +211,14 @@ abstract class MY_Controller extends CI_Controller
         $this->load->view($view, $data);
         $this->load->view('layout/footer', $data);
         $this->load->view('layout/scripts', $data);
+    }
+
+    /** plain-text response: a model result ("success", "success<<<###>>>id" or an error) for the page JS / toastr */
+    protected function text($message, $status = 200)
+    {
+        $this->output->set_status_header($status)
+            ->set_content_type('text/plain', 'UTF-8')
+            ->set_output((string) $message);
     }
 
     /** JSON response for AJAX endpoints */

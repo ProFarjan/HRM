@@ -211,6 +211,70 @@ class Input_validator
         return $raw;
     }
 
+    /** list of strings that must each be one of $allowed (checkbox groups such as permission keys); de-duplicated */
+    public function enum_list($name, array $allowed, $required = FALSE)
+    {
+        $raw = $this->read($name);
+        if ($raw === NULL || $raw === '' || $raw === array()) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : array();
+        }
+        if ( ! is_array($raw) || count($raw) > count($allowed)) {
+            return $this->fail($name, sprintf($this->t('v_enum', '%s has an invalid value.'), $this->label($name)));
+        }
+        $lookup = array();
+        foreach ($allowed as $a) {
+            $lookup[(string) $a] = $a;
+        }
+        $out = array();
+        foreach ($raw as $item) {
+            if ( ! is_string($item) || ! isset($lookup[$item])) {
+                return $this->fail($name, sprintf($this->t('v_enum', '%s has an invalid value.'), $this->label($name)));
+            }
+            $out[$item] = $lookup[$item];
+        }
+        return array_values($out);
+    }
+
+    /** an e-mail address (FILTER_VALIDATE_EMAIL), at most $max characters, returned lower case */
+    public function email($name, $max = 120, $required = TRUE)
+    {
+        $raw = $this->text($name, $max, $required);
+        if ($raw === NULL) {
+            return NULL;
+        }
+        if (filter_var($raw, FILTER_VALIDATE_EMAIL) === FALSE) {
+            return $this->fail($name, sprintf($this->t('v_email', '%s is not a valid e-mail address.'), $this->label($name)));
+        }
+        return mb_strtolower($raw, 'UTF-8');
+    }
+
+    /**
+     * An uploaded image (G6 uploads): the type is read from the file contents (getimagesize), never from its name or the
+     * browser's MIME type; size capped. Returns array('tmp' => path, 'ext' => 'png'|'jpg') or NULL (absent / error).
+     */
+    public function image($name, $max_kb = 512, $required = FALSE)
+    {
+        $file = isset($_FILES[$name]) ? $_FILES[$name] : NULL;
+        if ( ! is_array($file) || ! isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : NULL;
+        }
+        if ( ! is_array($file['error']) && in_array($file['error'], array(UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE), TRUE)) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        if (is_array($file['error']) || $file['error'] !== UPLOAD_ERR_OK || ! is_uploaded_file($file['tmp_name'])) {
+            return $this->fail($name, sprintf($this->t('v_upload', '%s could not be uploaded.'), $this->label($name)));
+        }
+        if ((int) $file['size'] > $max_kb * 1024) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        $info = @getimagesize($file['tmp_name']);
+        $types = array(IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg');
+        if ( ! $info || ! isset($types[$info[2]])) {
+            return $this->fail($name, sprintf($this->t('v_upload_type', '%s must be a PNG or JPEG image.'), $this->label($name)));
+        }
+        return array('tmp' => $file['tmp_name'], 'ext' => $types[$info[2]]);
+    }
+
     /** list of ids (checkbox groups / bulk actions), at most $max_count entries, each >= 1, de-duplicated */
     public function int_list($name, $max_count = 1000, $required = TRUE)
     {

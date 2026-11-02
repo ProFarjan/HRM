@@ -27,6 +27,23 @@ class Auth_model extends MY_Model
         return $row;
     }
 
+    /** an active branch by id (raw query: may run while a caller builds a query) */
+    public function active_branch($branch_id)
+    {
+        $row = $this->db->query("SELECT id, name, timezone FROM branches WHERE id = ? AND status = 'Active'", array((int) $branch_id))->row_array();
+        return $row ? $row : NULL;
+    }
+
+    /** id => name of every active branch (header branch switcher) */
+    public function active_branches()
+    {
+        $out = array();
+        foreach ($this->db->query("SELECT id, name FROM branches WHERE status = 'Active' ORDER BY name")->result_array() as $r) {
+            $out[(int) $r['id']] = $r['name'];
+        }
+        return $out;
+    }
+
     /** minutes the pair username+IP stays locked (0 = not locked) */
     public function locked_minutes($username, $ip)
     {

@@ -45,6 +45,21 @@ if ( ! function_exists('has_permission_reset'))
 	}
 }
 
+if ( ! function_exists('current_permission_keys'))
+{
+	/** every catalog key the current user holds (all of them for the system Admin role) */
+	function current_permission_keys()
+	{
+		$out = array();
+		foreach (array_keys(permission_catalog_keys()) as $key) {
+			if (has_permission($key)) {
+				$out[] = $key;
+			}
+		}
+		return $out;
+	}
+}
+
 if ( ! function_exists('has_permission'))
 {
 	function has_permission($key)
