@@ -42,6 +42,14 @@ abstract class Hrm_migration extends CI_Migration
         )->num_rows() > 0;
     }
 
+    protected function fk_exists($table, $constraint)
+    {
+        return $this->db->query(
+            "SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = 'FOREIGN KEY'",
+            array($table, $constraint)
+        )->num_rows() > 0;
+    }
+
     /** run the full CREATE TABLE statement unless the table already exists */
     protected function create_table($table, $create_sql)
     {
