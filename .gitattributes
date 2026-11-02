@@ -6,3 +6,5 @@
 *.ttf binary
 *.eot binary
 *.gif binary
+/tests/fixtures/adms/*.txt -text
+/tests/fixtures/service/*.json -text
