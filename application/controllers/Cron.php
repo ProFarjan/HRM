@@ -15,6 +15,7 @@ class Cron extends CI_Controller
         'migrate'      => '@cli',
         'housekeeping' => '@cli',
         'attendance_close' => '@cli',
+        'device_health' => '@cli',
     );
 
     public function __construct()
@@ -115,6 +116,41 @@ class Cron extends CI_Controller
             }
         }
         exit($failed ? 1 : 0);
+    }
+
+    /**
+     * php index.php cron device_health - every 15 minutes: stale devices, clock drift and "possible lost punches" (P16) per branch.
+     * Prints one line per device; the lost-punch flag is stored on the device (Devices page, later the dashboard).
+     */
+    public function device_health()
+    {
+        foreach (Tenant::names() as $database) {
+            try {
+                Tenant::switch_to($database);
+            } catch (RuntimeException $e) {
+                echo $database . ': ' . $e->getMessage() . "\n";
+                continue;
+            }
+            $this->load->model('Day_close_model');
+            $this->load->model('Devices_model');
+            foreach ($this->Day_close_model->active_branches() as $b) {
+                date_default_timezone_set(in_array($b['timezone'], timezone_identifiers_list(), TRUE) ? $b['timezone'] : 'UTC');
+                set_current_branch_id((int) $b['id']);
+                foreach ($this->Devices_model->check_health((int) $b['id']) as $name => $r) {
+                    $flags = array();
+                    if ($r['alert']) {
+                        $flags[] = 'POSSIBLE LOST PUNCHES';
+                    }
+                    if ($r['stale']) {
+                        $flags[] = 'stale';
+                    }
+                    if ($r['drift']) {
+                        $flags[] = 'clock drift';
+                    }
+                    echo sprintf("%s %s %s: silent %.1f h%s\n", $database, $b['code'], $name, $r['silent_hours'], $flags ? ' - ' . implode(', ', $flags) : ' - ok');
+                }
+            }
+        }
     }
 
     /** php index.php cron housekeeping - purge device_logs > 30 d, idempotency_keys > 7 d, login_attempts, rate_limits */
