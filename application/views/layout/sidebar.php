@@ -5,12 +5,13 @@
 			<li class="header"><?= e(t('menu_main')) ?></li>
 			<?php foreach ($menu as $item): ?>
 				<?php if (isset($item['children'])): ?>
-					<li class="treeview">
+					<?php $open = in_array($active_menu, array_column($item['children'], 'url'), TRUE); ?>
+					<li class="treeview<?= $open ? ' active menu-open' : '' ?>">
 						<a href="#"><i class="fa <?= e($item['icon']) ?>"></i> <span><?= e(t($item['label'])) ?></span>
 							<span class="pull-right-container"><i class="fa fa-angle-left pull-right"></i></span></a>
 						<ul class="treeview-menu">
 							<?php foreach ($item['children'] as $child): ?>
-								<li><a href="<?= site_url($child['url']) ?>"><i class="fa fa-circle-o"></i> <?= e(t($child['label'])) ?></a></li>
+								<li<?= $active_menu === $child['url'] ? ' class="active"' : '' ?>><a href="<?= site_url($child['url']) ?>"><i class="fa fa-circle-o"></i> <?= e(t($child['label'])) ?></a></li>
 							<?php endforeach; ?>
 						</ul>
 					</li>

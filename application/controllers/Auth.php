@@ -41,7 +41,7 @@ class Auth extends CI_Controller
     public function login()
     {
         if ((int) $this->session->userdata('user_id') > 0) {
-            redirect('dashboard');
+            redirect('dashboard/home');
         }
         $data = array('error' => '', 'notice' => '');
         $reasons = array('idle' => 'logged_out_idle', 'inactive' => 'logged_out_inactive', 'out' => 'logged_out');
@@ -62,7 +62,7 @@ class Auth extends CI_Controller
                 if ($user['must_change_password']) {
                     redirect('auth/change_password');
                 }
-                redirect(preg_match('#^[A-Za-z0-9_/\-]{1,120}$#', $after) ? $after : 'dashboard');
+                redirect(preg_match('#^[A-Za-z0-9_/\-]{1,120}$#', $after) ? $after : 'dashboard/home');
             }
             $data['error'] = $message;
         }
@@ -92,7 +92,7 @@ class Auth extends CI_Controller
             $result = $this->Auth_model->change_password($user['id']);
             if ($result === 'success') {
                 $this->session->sess_regenerate(TRUE);
-                redirect('dashboard');
+                redirect('dashboard/home');
             }
             $data['error'] = $result;
         }

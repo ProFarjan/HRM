@@ -16,7 +16,8 @@
 		loginUrl: <?= json_encode(site_url('auth/login')) ?>,
 		logoutUrl: <?= json_encode(site_url('auth/logout')) ?>,
 		pingUrl: <?= json_encode(site_url('dashboard/ping')) ?>,
-		dateFormat: <?= json_encode(hrm_date_format()) ?>
+		dateFormat: <?= json_encode(hrm_date_format()) ?>,
+		savedText: <?= json_encode(t('saved')) ?>
 	};
 </script>
 <script src="<?= base_url('theme/js/app.js') ?>?v=<?= filemtime(FCPATH . 'theme/js/app.js') ?>"></script>
