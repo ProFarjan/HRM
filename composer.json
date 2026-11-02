@@ -1,0 +1,29 @@
+{
+    "name": "profarjan/hrm",
+    "description": "Standalone HRM & Payroll application (CodeIgniter 3)",
+    "type": "project",
+    "require": {
+        "php": ">=7.4",
+        "mpdf/mpdf": "^8.3",
+        "phpoffice/phpspreadsheet": "^1.30"
+    },
+    "config": {
+        "platform": {
+            "php": "7.4.33"
+        },
+        "sort-packages": true
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "files": [
+            "application/core/hrm_autoload.php"
+        ]
+    },
+    "scripts": {
+        "static": "php tests/static_checks.php",
+        "test": "phpunit",
+        "lint": "find application tests -name '*.php' -not -path 'tests/fixtures/*' -print0 | xargs -0 -n1 php -l"
+    }
+}
