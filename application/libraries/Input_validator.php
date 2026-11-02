@@ -172,7 +172,7 @@ class Input_validator
         $CI =& get_instance();
         $CI->load->model('Access_model');
         if ( ! $CI->Access_model->record_in_scope($table, $id)) {
-            return $this->fail($name, sprintf($this->t('v_ref', 'Selected %s is not valid.'), $this->label($name)));
+            return $this->fail($name, sprintf($this->t('v_ref', 'Selected %s is not valid.'), mb_strtolower($this->label($name), 'UTF-8')));
         }
         return $id;
     }
@@ -273,6 +273,43 @@ class Input_validator
             return $this->fail($name, sprintf($this->t('v_upload_type', '%s must be a PNG or JPEG image.'), $this->label($name)));
         }
         return array('tmp' => $file['tmp_name'], 'ext' => $types[$info[2]]);
+    }
+
+    /**
+     * An uploaded document: PDF (checked by its "%PDF-" signature) or a PNG/JPEG image (getimagesize). Never trusts the
+     * name or the browser's MIME type. Returns array('tmp', 'ext', 'name' => original file name, trimmed) or NULL.
+     */
+    public function document($name, $max_kb = 2048, $required = TRUE)
+    {
+        $file = isset($_FILES[$name]) ? $_FILES[$name] : NULL;
+        if ( ! is_array($file) || ! isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : NULL;
+        }
+        if ( ! is_array($file['error']) && in_array($file['error'], array(UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE), TRUE)) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        if (is_array($file['error']) || $file['error'] !== UPLOAD_ERR_OK || ! is_uploaded_file($file['tmp_name'])) {
+            return $this->fail($name, sprintf($this->t('v_upload', '%s could not be uploaded.'), $this->label($name)));
+        }
+        if ((int) $file['size'] > $max_kb * 1024) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        $ext = NULL;
+        $head = (string) @file_get_contents($file['tmp_name'], FALSE, NULL, 0, 5);
+        if ($head === '%PDF-') {
+            $ext = 'pdf';
+        } else {
+            $info = @getimagesize($file['tmp_name']);
+            $types = array(IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg');
+            if ($info && isset($types[$info[2]])) {
+                $ext = $types[$info[2]];
+            }
+        }
+        if ($ext === NULL) {
+            return $this->fail($name, sprintf($this->t('v_upload_doc_type', '%s must be a PDF, PNG or JPEG file.'), $this->label($name)));
+        }
+        $original = preg_replace('#[\x00-\x1F\x7F<>"/\\\\]#', '', (string) basename(str_replace('\\', '/', (string) $file['name'])));
+        return array('tmp' => $file['tmp_name'], 'ext' => $ext, 'name' => mb_substr($original, 0, 150, 'UTF-8'));
     }
 
     /** list of ids (checkbox groups / bulk actions), at most $max_count entries, each >= 1, de-duplicated */

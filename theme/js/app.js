@@ -143,7 +143,11 @@
 	$(function () {
 		initICheck(document);
 		if (cfg.idleMinutes > 0) { startIdleTimer(cfg.idleMinutes); }
-		if ($.fn.datepicker) { $('.datepicker').datepicker({ format: pickerFormat(cfg.dateFormat), autoclose: true, todayHighlight: true }); }
+		if ($.fn.datepicker) {
+			$('.datepicker').datepicker({ format: pickerFormat(cfg.dateFormat), autoclose: true, todayHighlight: true });
+			// the picker re-reads the field only on keyup: a pasted or autofilled value would be wiped when the field loses focus
+			$(document).on('input paste', '.datepicker', function () { var el = this; window.setTimeout(function () { $(el).datepicker('update'); }, 0); });
+		}
 		if ($.fn.select2) { $('.select2').select2(); }
 		$('#branch-switch').on('change', function () { $('#branch-switch-form').submit(); });
 	});

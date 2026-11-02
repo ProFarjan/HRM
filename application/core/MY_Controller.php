@@ -87,6 +87,15 @@ abstract class MY_Controller extends CI_Controller
         show_error($message, $code, $code === 405 ? 'Method not allowed' : 'Access denied');
     }
 
+    /** an action that needs a second permission besides its map entry (e.g. salary changes also need employees_edit) */
+    protected function require_permission($key)
+    {
+        if ( ! has_permission($key)) {
+            $this->deny(403, $this->input->is_ajax_request() ? 'text' : 'page');
+        }
+        return TRUE;
+    }
+
     /** The record exists in the current branch and inside the user's own-records scope; 403 otherwise. */
     protected function belong_to($table, $id)
     {

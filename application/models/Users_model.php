@@ -295,6 +295,16 @@ class Users_model extends MY_Model
         return $others > 0 ? TRUE : t('users_last_admin');
     }
 
+    /** may the current user manage this login (link it to an employee, ...)? TRUE or an error message */
+    public function check_manageable($user_id)
+    {
+        $row = $this->db->query('SELECT u.role_id, r.is_system FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = ?', array((int) $user_id))->row_array();
+        if ( ! $row) {
+            return t('not_found');
+        }
+        return $this->role_within_actor((int) $row['role_id'], (int) $row['is_system']) ? TRUE : t('users_target_above_you');
+    }
+
     /** may the current user assign this role? TRUE or an error message */
     public function check_assignable($role_id)
     {
