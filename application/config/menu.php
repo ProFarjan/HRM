@@ -21,6 +21,15 @@ $config['menu'] = array(
 		array('label' => 'menu_rosters', 'url' => 'rosters', 'permission' => 'rosters_manage'),
 		array('label' => 'menu_holidays', 'url' => 'holidays', 'permission' => 'holidays_view'),
 	)),
+	array('label' => 'menu_attendance', 'icon' => 'fa-calendar-check-o', 'children' => array(
+		array('label' => 'menu_attendance_list', 'url' => 'attendance', 'permission' => 'attendance_view'),
+		array('label' => 'att_mark_self', 'url' => 'attendance/my_day', 'permission' => 'attendance_mark_self'),
+		array('label' => 'att_mark', 'url' => 'attendance/mark', 'permission' => 'attendance_add'),
+		array('label' => 'att_bulk', 'url' => 'attendance/bulk', 'permission' => 'attendance_bulk'),
+		array('label' => 'att_punches', 'url' => 'attendance/punches', 'permission' => 'attendance_punches'),
+		array('label' => 'rep_daily', 'url' => 'reports/daily', 'permission' => 'attendance_report'),
+		array('label' => 'rep_monthly', 'url' => 'reports/monthly', 'permission' => 'attendance_report'),
+	)),
 	array('label' => 'menu_admin', 'icon' => 'fa-cogs', 'children' => array(
 		array('label' => 'menu_users', 'url' => 'users', 'permission' => 'users_view'),
 		array('label' => 'menu_roles', 'url' => 'roles', 'permission' => 'roles_manage'),

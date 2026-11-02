@@ -17,6 +17,9 @@
 	<link rel="stylesheet" href="<?= base_url('theme/datepicker/bootstrap-datepicker3.min.css') ?>">
 	<link rel="stylesheet" href="<?= base_url('theme/icheck/square/blue.css') ?>">
 	<link rel="stylesheet" href="<?= base_url('theme/toastr/toastr.min.css') ?>">
+	<?php foreach (isset($page_vendor_css) ? (array) $page_vendor_css : array() as $css): ?>
+	<link rel="stylesheet" href="<?= base_url('theme/' . $css) ?>">
+	<?php endforeach; ?>
 	<link rel="stylesheet" href="<?= base_url('theme/css/app.css') ?>?v=<?= filemtime(FCPATH . 'theme/css/app.css') ?>">
 </head>
 <body class="hold-transition skin-blue sidebar-mini">

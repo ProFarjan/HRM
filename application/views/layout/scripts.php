@@ -20,6 +20,9 @@
 		savedText: <?= json_encode(t('saved')) ?>
 	};
 </script>
+<?php foreach (isset($page_vendor_js) ? (array) $page_vendor_js : array() as $vendor): ?>
+<script src="<?= base_url('theme/' . $vendor) ?>"></script>
+<?php endforeach; ?>
 <script src="<?= base_url('theme/js/app.js') ?>?v=<?= filemtime(FCPATH . 'theme/js/app.js') ?>"></script>
 <?php if (isset($page_js)): foreach ((array) $page_js as $js): ?>
 <script src="<?= base_url('theme/js/' . $js . '.js') ?>?v=<?= filemtime(FCPATH . 'theme/js/' . $js . '.js') ?>"></script>
