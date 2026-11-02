@@ -10,9 +10,10 @@ server-side DataTables, MySQL 5.7+ / MariaDB 10.3+ (InnoDB, utf8mb4). One databa
 **[CLAUDE.md](CLAUDE.md) is the specification** (architecture, guardrails G1-G8, domain model, business rules, device
 integration, permissions, the defect register P1-P20 and the build order). Read it before changing anything.
 
-Status: build steps 0-3 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
+Status: build steps 0-4 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
 designations, employees with salary history, documents, device PIN history; shifts, shift assignments, roster, holidays,
-`Shift_calculator`). Business modules arrive
+`Shift_calculator`; attendance punches, `Punch_ingestor`, manual / bulk / self marking, approval, rebuild, day close cron,
+calendar, daily and monthly reports). Business modules arrive
 step by step, see "Build order" in CLAUDE.md.
 
 ## Requirements
@@ -52,7 +53,7 @@ php index.php migrate                                                          #
 ### Cron (server crontab)
 
 ```cron
-30 0  * * *    php /path/to/hrm/index.php cron attendance_close       # day close, yesterday          (build step 4)
+30 0  * * *    php /path/to/hrm/index.php cron attendance_close       # day close, yesterday          (available now)
 10 0  1 1 *    php /path/to/hrm/index.php cron leave_carry_forward    # year-end carry forward         (build step 6)
 */15 * * * *   php /path/to/hrm/index.php cron device_health          # stale devices, lost punches    (build step 5)
 15 3  * * *    php /path/to/hrm/index.php cron housekeeping           # purge technical rows           (available now)
@@ -80,6 +81,8 @@ HRM_ADMIN_PASSWORD=... node tests/e2e/shell_smoke.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/admin_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/organisation_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/time_pages.js
+TENANT_DB=hrm_dev php tests/e2e/seed_attendance.php                                 # demo punches (re-run resets them)
+HRM_ADMIN_PASSWORD=... node tests/e2e/attendance_pages.js
 ```
 
 The test bootstrap boots CodeIgniter against **`hrm_test`** (it refuses any database whose name does not end in `_test`),
@@ -93,9 +96,10 @@ user without permissions is 403), `Input_validator_test`. The HTTP tests start `
 application/config      config, database(.example), hrm (setting defaults), permissions (catalog), menu (sidebar)
 application/core        MY_Controller (default-deny _remap), Ess_Controller, Api_Controller, MY_Model, Default_deny, hrm_autoload
 application/controllers Auth, Cron, Dashboard, Users, Roles, Branches, Settings, Audit, Employees, Departments, Designations,
-                        Shifts, Employee_shifts, Rosters, Holidays
+                        Shifts, Employee_shifts, Rosters, Holidays, Attendance, Reports
 application/models      all SQL lives here
-application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration, Shift_calculator
+application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration, Shift_calculator,
+                        Punch_ingestor
 application/helpers     hrm (settings, dates, money), permission, sequence
 application/migrations  NNN_name.php, sequential, idempotent, working down()
 theme/                  AdminLTE 2 and plugins as plain files, theme/js/app.js (CSRF, iCheck, idle logout)

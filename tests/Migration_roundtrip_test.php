@@ -110,6 +110,7 @@ class Migration_roundtrip_test extends Hrm_test_case
             'salary_structures' => array('employees', 'users'),
             'shifts' => array('branches', 'users'), 'employee_shifts' => array('employees', 'shifts', 'users'),
             'shift_rosters' => array('employees', 'shifts', 'users'), 'holidays' => array('branches', 'users'),
+            'attendance_punches' => array('branches', 'employees', 'users'), 'attendance' => array('branches', 'employees', 'shifts', 'users', 'users'),
         );
         foreach ($expected as $table => $parents) {
             $found = array();

@@ -28,8 +28,8 @@ class Access_model extends MY_Model
             $this->db->where($cfg['branch'], $branch_id ? (int) $branch_id : 0);
         }
         if ($restrict_to_own) {
-            $employee_id = current_employee_id();
-            $this->db->where($cfg['own'], $employee_id ? $employee_id : 0);
+            // the same rule as the lists: own rows, plus the employees of a department the user heads (scope_department)
+            $this->db->where($this->department_scope_sql($table . '.' . $cfg['own'], current_employee_id()), NULL, FALSE);
         }
         return $this->db->count_all_results() > 0;
     }
