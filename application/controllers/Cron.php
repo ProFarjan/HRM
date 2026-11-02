@@ -14,6 +14,7 @@ class Cron extends CI_Controller
         'ping'         => '@cli',
         'migrate'      => '@cli',
         'housekeeping' => '@cli',
+        'attendance_close' => '@cli',
     );
 
     public function __construct()
@@ -74,6 +75,44 @@ class Cron extends CI_Controller
             }
             echo sprintf("%s: %d -> %d %s%s\n", $database, $from, $to, $ok ? 'OK' : 'FAILED', $ok ? '' : ' (' . $message . ')');
             $failed += $ok ? 0 : 1;
+        }
+        exit($failed ? 1 : 0);
+    }
+
+    /**
+     * php index.php cron attendance_close [Y-m-d] [dry-run]  - day close (P1) for every tenant and every active branch.
+     * Default day = yesterday in each branch's timezone; today or a future day is refused (never closed).
+     */
+    public function attendance_close($date = NULL, $dry = NULL)
+    {
+        if ($date !== NULL && parse_strict_date($date, 'Y-m-d') === FALSE) {
+            fwrite(STDERR, "Usage: php index.php cron attendance_close [Y-m-d] [dry-run]\n");
+            exit(2);
+        }
+        $dry_run = ($dry === 'dry-run');
+        $failed = 0;
+        foreach (Tenant::names() as $database) {
+            try {
+                Tenant::switch_to($database);
+            } catch (RuntimeException $e) {
+                echo $database . ': ' . $e->getMessage() . "\n";
+                $failed++;
+                continue;
+            }
+            $this->load->model('Day_close_model');
+            foreach ($this->Day_close_model->active_branches() as $b) {
+                $day = $date !== NULL ? $date : date('Y-m-d', strtotime(Day_close_model::today_in($b['timezone']) . ' -1 day'));
+                set_current_branch_id((int) $b['id']);
+                $r = $this->Day_close_model->close_day((int) $b['id'], $day, $dry_run);
+                $parts = array();
+                foreach ($r['created'] as $status => $n) {
+                    $parts[] = $status . '=' . $n;
+                }
+                echo sprintf("%s %s %s: %s%s, already %d, missing check-out %d%s\n", $database, $b['code'], $day,
+                    $r['ok'] ? 'created ' . ($parts ? implode(' ', $parts) : 'none') : 'FAILED (' . $r['message'] . ')',
+                    $dry_run ? ' (dry run)' : '', $r['already'], $r['missing_checkout'], '');
+                $failed += $r['ok'] ? 0 : 1;
+            }
         }
         exit($failed ? 1 : 0);
     }
