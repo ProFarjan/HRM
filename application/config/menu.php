@@ -30,8 +30,17 @@ $config['menu'] = array(
 		array('label' => 'att_unmatched_page', 'url' => 'attendance/unmatched', 'permission' => 'attendance_punches'),
 		array('label' => 'att_closed_page', 'url' => 'attendance/closed_punches', 'permission' => 'attendance_punches'),
 		array('label' => 'att_import', 'url' => 'attendance/import', 'permission' => 'attendance_import'),
+	)),
+	array('label' => 'menu_reports', 'icon' => 'fa-bar-chart', 'children' => array(
 		array('label' => 'rep_daily', 'url' => 'reports/daily', 'permission' => 'attendance_report'),
 		array('label' => 'rep_monthly', 'url' => 'reports/monthly', 'permission' => 'attendance_report'),
+		array('label' => 'rep_inout', 'url' => 'reports/inout', 'permission' => 'attendance_report'),
+		array('label' => 'rep_employee', 'url' => 'reports/employee', 'permission' => 'attendance_report'),
+		array('label' => 'rep_summary', 'url' => 'reports/summary', 'permission' => 'attendance_report'),
+		array('label' => 'rep_late', 'url' => 'reports/late', 'permission' => 'attendance_report'),
+		array('label' => 'rep_absent', 'url' => 'reports/absent', 'permission' => 'attendance_report'),
+		array('label' => 'rep_overtime', 'url' => 'reports/overtime', 'permission' => 'attendance_report'),
+		array('label' => 'rep_missing', 'url' => 'reports/missing', 'permission' => 'attendance_report'),
 	)),
 	array('label' => 'menu_devices_group', 'icon' => 'fa-hdd-o', 'children' => array(
 		array('label' => 'menu_devices', 'url' => 'devices', 'permission' => 'devices_view'),

@@ -5,6 +5,7 @@ $css = array('P' => 'att-p', 'A' => 'att-a', '½' => 'att-h2', 'L' => 'att-l', '
 <div class="content-wrapper">
 	<section class="content-header"><h1><?= e(t('rep_monthly')) ?> <small><?= e(date('F Y', mktime(0, 0, 0, $month, 1, $year)) . ' - ' . $user['branch_name']) ?></small></h1></section>
 	<section class="content">
+		<?php $this->load->view('reports/_nav', array('active' => 'monthly')); ?>
 		<div class="box box-primary">
 			<div class="box-header with-border no-print">
 				<form class="form-inline" method="get" action="<?= site_url('reports/monthly') ?>" id="monthly-filter">
