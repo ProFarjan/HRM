@@ -159,4 +159,22 @@ class Helpers_test extends Hrm_test_case
             }
         }
     }
+
+    public function test_warnings_in_application_code_fail_tests()
+    {
+        // CodeIgniter's handler must not be the active one, or warnings would only be printed (see tests/bootstrap.php)
+        $current = set_error_handler(function () { return FALSE; });
+        restore_error_handler();
+        $this->assertNotSame('_error_handler', $current);
+        $caught = NULL;
+        try {
+            $empty = array();
+            $value = $empty['missing'];
+            unset($value);
+        } catch (Throwable $e) {
+            $caught = $e;
+        }
+        $this->assertNotNull($caught, 'an undefined array key must raise, not just print');
+        $this->assertStringContainsString('missing', $caught->getMessage());
+    }
 }

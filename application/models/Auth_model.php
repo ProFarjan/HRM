@@ -24,6 +24,7 @@ class Auth_model extends MY_Model
             $row[$k] = (int) $row[$k];
         }
         $row['employee_id'] = $row['employee_id'] === NULL ? NULL : (int) $row['employee_id'];
+        $row['home_branch_id'] = $row['branch_id'];               // load_global() may switch branch_id (Admin), never this
         return $row;
     }
 

@@ -58,6 +58,8 @@ $config['scoped_tables'] = array(
 	'departments'  => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
 	'designations' => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
 	'employees'    => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'shifts'       => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'holidays'     => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
 );
 
 $config['sequences'] = array(

@@ -4,7 +4,7 @@ function settings_form(array $values)
 {
     $post = array();
     foreach ($values as $k => $v) {
-        if (in_array($k, array('logo', 'default_shift_id'), TRUE)) {
+        if ($k === 'logo' || ($k === 'default_shift_id' && $v === NULL)) {
             continue;
         }
         if ($k === 'weekly_offs') {

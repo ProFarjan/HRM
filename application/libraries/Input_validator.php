@@ -312,6 +312,39 @@ class Input_validator
         return array('tmp' => $file['tmp_name'], 'ext' => $ext, 'name' => mb_substr($original, 0, 150, 'UTF-8'));
     }
 
+    /**
+     * An uploaded spreadsheet for imports: .xlsx (a ZIP container, checked by its signature) or .csv (plain text, no NUL bytes).
+     * Returns array('tmp', 'type' => 'Xlsx'|'Csv') - the PhpSpreadsheet reader to use - or NULL.
+     */
+    public function spreadsheet($name, $max_kb = 2048, $required = TRUE)
+    {
+        $file = isset($_FILES[$name]) ? $_FILES[$name] : NULL;
+        if ( ! is_array($file) || ! isset($file['error']) || $file['error'] === UPLOAD_ERR_NO_FILE) {
+            return $required ? $this->fail($name, sprintf($this->t('v_required', '%s is required.'), $this->label($name))) : NULL;
+        }
+        if ( ! is_array($file['error']) && in_array($file['error'], array(UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE), TRUE)) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        if (is_array($file['error']) || $file['error'] !== UPLOAD_ERR_OK || ! is_uploaded_file($file['tmp_name'])) {
+            return $this->fail($name, sprintf($this->t('v_upload', '%s could not be uploaded.'), $this->label($name)));
+        }
+        if ((int) $file['size'] > $max_kb * 1024) {
+            return $this->fail($name, sprintf($this->t('v_upload_size', '%s must be at most %d KB.'), $this->label($name), $max_kb));
+        }
+        $head = (string) @file_get_contents($file['tmp_name'], FALSE, NULL, 0, 4096);
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (substr($head, 0, 4) === "PK\x03\x04" && $ext === 'xlsx') {
+            return array('tmp' => $file['tmp_name'], 'type' => 'Xlsx');
+        }
+        if ($ext === 'csv') {
+            $all = (string) file_get_contents($file['tmp_name']);           // whole file: a 4 KB cut could split a UTF-8 character
+            if (strpos($all, "\0") === FALSE && mb_check_encoding(preg_replace('/^\xEF\xBB\xBF/', '', $all), 'UTF-8')) {
+                return array('tmp' => $file['tmp_name'], 'type' => 'Csv');
+            }
+        }
+        return $this->fail($name, sprintf($this->t('v_upload_sheet_type', '%s must be an .xlsx or .csv file.'), $this->label($name)));
+    }
+
     /** list of ids (checkbox groups / bulk actions), at most $max_count entries, each >= 1, de-duplicated */
     public function int_list($name, $max_count = 1000, $required = TRUE)
     {

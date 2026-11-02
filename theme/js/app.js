@@ -81,6 +81,14 @@
 		return false;
 	};
 
+	// "success<<<###>>>3/1" + a message with %d placeholders -> "3 assigned, 1 skipped"; otherwise "Saved"
+	cfg.successText = function (text, message) {
+		var parts = String(text).split('<<<###>>>');
+		if (!message || parts.length < 2) { return cfg.savedText || 'Saved'; }
+		var numbers = parts[1].split('/'), i = 0;
+		return String(message).replace(/%d/g, function () { return numbers[i++] || '0'; });
+	};
+
 	// ---- forms posted by AJAX: <form class="hrm-ajax-form" data-redirect="..." | data-reload="1"> ---------------------
 	$(document).on('submit', 'form.hrm-ajax-form', function (e) {
 		e.preventDefault();
@@ -88,7 +96,8 @@
 		$.ajax({ url: $form.attr('action'), type: 'POST', data: new window.FormData(this), processData: false, contentType: false, dataType: 'text' })
 			.done(function (text) {
 				if (!cfg.ok(text)) { return; }
-				window.toastr.success(cfg.savedText || 'Saved');
+				window.toastr.success(cfg.successText(text, $form.data('message')));
+				if ($form.data('after')) { $(document).trigger('hrm:' + $form.data('after'), [text]); }
 				if ($form.data('redirect')) { window.location = $form.data('redirect'); }
 				else if ($form.data('reload')) { window.setTimeout(function () { window.location.reload(); }, 400); }
 				else { $form[0].reset(); }

@@ -64,11 +64,16 @@ class Employees extends MY_Controller
             'documents' => $this->Employees_model->documents($id),
             'salaries'  => array(),
             'linkable'  => array(),
+            'shift_history' => NULL,
             'page_js'   => array('employees'),
         );
         if (has_permission('employees_salary')) {
             $this->load->model('Salary_model');
             $data['salaries'] = $this->Salary_model->history($id);
+        }
+        if (has_permission('shifts_view')) {
+            $this->load->model('Employee_shifts_model');
+            $data['shift_history'] = $this->Employee_shifts_model->history($id);
         }
         if (has_permission('users_edit') && has_permission('employees_edit')) {
             $data['linkable'] = $this->Employees_model->linkable_users();
