@@ -27,8 +27,17 @@ $config['menu'] = array(
 		array('label' => 'att_mark', 'url' => 'attendance/mark', 'permission' => 'attendance_add'),
 		array('label' => 'att_bulk', 'url' => 'attendance/bulk', 'permission' => 'attendance_bulk'),
 		array('label' => 'att_punches', 'url' => 'attendance/punches', 'permission' => 'attendance_punches'),
+		array('label' => 'att_unmatched_page', 'url' => 'attendance/unmatched', 'permission' => 'attendance_punches'),
+		array('label' => 'att_closed_page', 'url' => 'attendance/closed_punches', 'permission' => 'attendance_punches'),
+		array('label' => 'att_import', 'url' => 'attendance/import', 'permission' => 'attendance_import'),
 		array('label' => 'rep_daily', 'url' => 'reports/daily', 'permission' => 'attendance_report'),
 		array('label' => 'rep_monthly', 'url' => 'reports/monthly', 'permission' => 'attendance_report'),
+	)),
+	array('label' => 'menu_devices_group', 'icon' => 'fa-hdd-o', 'children' => array(
+		array('label' => 'menu_devices', 'url' => 'devices', 'permission' => 'devices_view'),
+		array('label' => 'dev_keys', 'url' => 'devices/keys', 'permission' => 'devices_keys'),
+		array('label' => 'dev_commands', 'url' => 'devices/commands', 'permission' => 'devices_commands'),
+		array('label' => 'dev_logs', 'url' => 'devices/logs', 'permission' => 'devices_view'),
 	)),
 	array('label' => 'menu_admin', 'icon' => 'fa-cogs', 'children' => array(
 		array('label' => 'menu_users', 'url' => 'users', 'permission' => 'users_view'),
