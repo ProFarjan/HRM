@@ -18,6 +18,15 @@ date_default_timezone_set('Asia/Dhaka');
 if ($CI->db->query("SELECT 1 FROM employees WHERE employee_code = 'ATT-01'")->num_rows()) {
     // re-run: undo what the browser check changed (manual punches and hand-made rows), then rebuild from the device punches
     $demo = "SELECT id FROM employees WHERE branch_id = ? AND employee_code LIKE 'ATT-%'";
+    // PIN 777 belongs to nobody (devices_pages.js links it to ATT-07 from seed_devices.php)
+    $CI->db->query("DELETE FROM attendance WHERE employee_id IN (SELECT id FROM employees WHERE device_pin = '777')");
+    $CI->db->query("DELETE FROM employee_pin_history WHERE device_pin = '777'");
+    $CI->db->query("UPDATE employees SET device_pin = NULL, device_pin_from = NULL WHERE device_pin = '777'");
+    $CI->db->query("UPDATE attendance_punches SET employee_id = NULL WHERE device_pin = '777'");
+    // other browser checks (time_pages.js) move people to other shifts: back to the day shift from the start
+    $CI->db->query('DELETE FROM shift_rosters WHERE employee_id IN (' . $demo . ')', array($branch));
+    $CI->db->query("DELETE FROM employee_shifts WHERE employee_id IN (" . $demo . ") AND shift_id <> (SELECT id FROM shifts WHERE branch_id = ? AND shift_code = 'DAYD')", array($branch, $branch));
+    $CI->db->query("UPDATE employee_shifts SET effective_from = '2025-01-01', effective_to = NULL WHERE employee_id IN (" . $demo . ')', array($branch));
     $CI->db->query("DELETE FROM attendance_punches WHERE source = 'manual' AND employee_id IN (" . $demo . ')', array($branch));
     $CI->db->query("DELETE FROM attendance WHERE employee_id IN (" . $demo . ')', array($branch));
     $days = $CI->db->query("SELECT DISTINCT employee_id, DATE_FORMAT(punch_at, '%Y-%m-%d') AS d FROM attendance_punches

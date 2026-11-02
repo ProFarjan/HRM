@@ -7,7 +7,7 @@
 				<input type="text" name="from_date" class="form-control datepicker" autocomplete="off" style="width:120px" placeholder="<?= e(t('dev_from')) ?>" value="<?= e(show_date(date('Y-m-d', strtotime(today_local() . ' -2 days')))) ?>">
 				<input type="text" name="to_date" class="form-control datepicker" autocomplete="off" style="width:120px" placeholder="<?= e(t('dev_to')) ?>" value="<?= e(show_date(today_local())) ?>">
 				<select name="device_id" class="form-control"><option value=""><?= e(t('dev_name')) ?>: <?= e(t('all')) ?></option><?php foreach ($devices as $id => $name): ?><option value="<?= (int) $id ?>"><?= e($name) ?></option><?php endforeach; ?></select>
-				<label class="checkbox-inline"><input type="checkbox" name="errors_only" value="1" id="errors-only"> <?= e(t('dev_errors_only')) ?></label>
+				<label class="checkbox-inline"><input type="checkbox" name="errors_only" value="1" id="errors-only" class="no-icheck"> <?= e(t('dev_errors_only')) ?></label>
 				<button type="submit" class="btn btn-default"><i class="fa fa-filter"></i> <?= e(t('filter')) ?></button>
 			</form>
 			<table id="logs-table" class="table table-bordered table-striped table-condensed" style="width:100%" data-url="<?= site_url('devices/logs_list') ?>">

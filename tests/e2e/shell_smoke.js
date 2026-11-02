@@ -93,7 +93,8 @@ async function login(page, user, pass) {
 	// logout is POST only: the menu button works
 	await page.goto(BASE + 'dashboard');
 	await page.click('.user-menu > a');
-	await Promise.all([page.waitForLoadState('load'), page.click('#logout-form button')]);
+	await Promise.all([page.waitForURL(/auth\/login/, { timeout: 8000 }).catch(() => {}), page.click('#logout-form button')]);
+	await page.waitForLoadState('load');
 	check(/auth\/login/.test(page.url()), 'logout returns to the login page (' + page.url() + ')');
 	await ctx.close();
 

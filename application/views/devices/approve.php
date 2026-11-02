@@ -9,7 +9,7 @@
 					<p><?= e(sprintf(t('dev_approve_info'), (string) $pending['ip'], $pending['hits'])) ?></p>
 					<div class="form-group"><label for="f_name"><?= e(t('dev_name')) ?></label><input type="text" id="f_name" name="name" class="form-control" maxlength="100" required></div>
 					<div class="form-group"><label for="f_branch"><?= e(t('dev_branch')) ?></label>
-						<select id="f_branch" name="branch_id" class="form-control"><?php foreach ($branches as $id => $name): ?><option value="<?= (int) $id ?>"><?= e($name) ?></option><?php endforeach; ?></select></div>
+						<select id="f_branch" name="branch_id" class="form-control"><?php foreach ($branches as $id => $name): ?><option value="<?= (int) $id ?>"<?= (int) $id === (int) current_branch_id() ? ' selected' : '' ?>><?= e($name) ?></option><?php endforeach; ?></select></div>
 					<div class="form-group"><label for="f_tz"><?= e(t('dev_timezone')) ?></label><input type="text" id="f_tz" name="timezone" class="form-control" maxlength="64" placeholder="<?= e($user['branch_timezone']) ?>"><p class="help-block"><?= e(t('dev_timezone_help')) ?></p></div>
 					<div class="checkbox"><label><input type="checkbox" name="restrict_ip" value="1" checked> <?= e(sprintf(t('dev_restrict_ip'), (string) $pending['ip'])) ?></label></div>
 				</div>

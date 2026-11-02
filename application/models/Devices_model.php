@@ -57,7 +57,7 @@ class Devices_model extends MY_Model
                 'mode'      => e(t('dev_mode_' . $r['comm_mode'])),
                 'serial'    => e((string) $r['serial_number'] . ($r['ip'] ? ($r['serial_number'] ? ' / ' : '') . $r['ip'] : '')),
                 'status'    => $r['status'] === 'active' ? '<span class="label label-success">' . e(t('dev_active')) . '</span>' : '<span class="label label-default">' . e(t('dev_disabled')) . '</span>',
-                'health'    => '<span class="label label-' . $h['color'] . '">' . e(t('dev_health_' . $h['color'])) . '</span>',
+                'health'    => '<span class="label label-' . array('green' => 'success', 'yellow' => 'warning', 'red' => 'danger')[$h['color']] . '">' . e(t('dev_health_' . $h['color'])) . '</span>',
                 'last_seen' => $r['last_seen_at'] === NULL ? '<span class="text-muted">' . e(t('dev_never')) . '</span>' : e(show_date($r['last_seen_at']) . ' ' . substr($r['last_seen_at'], 11, 5)),
                 'last_punch' => $r['last_punch_at'] === NULL ? '' : e(show_date($r['last_punch_at']) . ' ' . substr($r['last_punch_at'], 11, 5)),
                 'today'     => (int) (isset($today[(int) $r['id']]) ? $today[(int) $r['id']] : 0),
