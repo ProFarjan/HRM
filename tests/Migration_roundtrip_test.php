@@ -103,7 +103,11 @@ class Migration_roundtrip_test extends Hrm_test_case
             $this->assertStringStartsWith('utf8mb4_', $r['TABLE_COLLATION'], $r['TABLE_NAME']);
         }
         $expected = array(
-            'users' => array('roles', 'branches'), 'role_permissions' => array('roles'), 'audit_log' => array('branches'), 'sequences' => array('branches'),
+            'users' => array('roles', 'branches', 'employees'), 'role_permissions' => array('roles'), 'audit_log' => array('branches'), 'sequences' => array('branches'),
+            'departments' => array('branches', 'users', 'employees'), 'designations' => array('branches', 'users'),
+            'employees' => array('branches', 'departments', 'designations', 'employees', 'users', 'users'),
+            'employee_pin_history' => array('branches', 'employees'), 'employee_documents' => array('employees', 'users'),
+            'salary_structures' => array('employees', 'users'),
         );
         foreach ($expected as $table => $parents) {
             $found = array();

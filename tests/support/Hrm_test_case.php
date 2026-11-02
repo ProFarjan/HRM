@@ -118,6 +118,22 @@ abstract class Hrm_test_case extends TestCase
         return $this->db->order_by('id')->get()->result_array();
     }
 
+    /** an employee row inserted directly (fixtures); returns the id */
+    protected function insert_employee($code, array $extra = array())
+    {
+        $this->db->insert('employees', array_merge(array(
+            'branch_id' => current_branch_id() ? current_branch_id() : $this->first_branch_id(), 'employee_code' => $code, 'first_name' => 'Emp ' . $code,
+            'employment_type' => 'Permanent', 'join_date' => '2024-01-01', 'status' => 'Active', 'created_at' => date('Y-m-d H:i:s'),
+        ), $extra));
+        return (int) $this->db->insert_id();
+    }
+
+    protected function id_of_result($result)
+    {
+        $this->assertStringStartsWith('success<<<###>>>', (string) $result, (string) $result);
+        return (int) substr($result, strlen('success<<<###>>>'));
+    }
+
     protected function queries_before()
     {
         return (int) $this->db->total_queries();
