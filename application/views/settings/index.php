@@ -68,6 +68,7 @@ $offs = array_flip(array_filter(explode(',', (string) $values['weekly_offs']), '
 						<div class="row"><div class="col-md-6">
 							<?= $flag('deduct_break') ?><?= $flag('early_leave_counts_as_late') ?>
 							<?= $number('ot_min_minutes', 0, 240) ?><?= $number('late_days_per_absent', 0, 31) ?>
+							<?= $select('default_shift_id', array('' => t('org_none')) + $shifts) ?>
 						</div></div>
 					</div>
 					<div class="tab-pane" id="tab-payroll">

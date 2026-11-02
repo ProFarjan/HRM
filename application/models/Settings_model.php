@@ -52,6 +52,7 @@ class Settings_model extends MY_Model
             'ot_min_minutes'    => $v->int('ot_min_minutes', 0, 240),
             'early_leave_counts_as_late' => $v->flag('early_leave_counts_as_late'),
             'late_days_per_absent' => $v->int('late_days_per_absent', 0, 31),
+            'default_shift_id'  => $v->int('default_shift_id', 1, NULL, FALSE),
             // Payroll
             'overtime_source'   => $v->enum('overtime_source', array('attendance', 'approved_requests')),
             'overtime_basis'    => $v->enum('overtime_basis', array('basic_salary', 'gross_salary')),
@@ -80,6 +81,10 @@ class Settings_model extends MY_Model
             if ($d < 1 || $d > 7) {
                 $v->fail('weekly_offs', sprintf(t('v_enum'), 'Weekly offs'));
             }
+        }
+        if ($new['default_shift_id'] !== NULL
+            && ! $this->db->query("SELECT 1 FROM shifts WHERE id = ? AND status = 'Active'", array($new['default_shift_id']))->num_rows()) {
+            $v->fail('default_shift_id', sprintf(t('v_ref'), 'default shift'));
         }
         $upload = $v->image('logo', self::LOGO_MAX_KB);
         $remove_logo = $v->flag('remove_logo');

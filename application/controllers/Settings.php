@@ -15,6 +15,7 @@ class Settings extends MY_Controller
     {
         parent::__construct();
         $this->load->model('Settings_model');
+        $this->load->model('Shifts_model');
         $this->data['active_menu'] = 'settings';
     }
 
@@ -26,6 +27,7 @@ class Settings extends MY_Controller
             'timezones'    => DateTimeZone::listIdentifiers(),
             'date_formats' => Settings_model::date_formats(),
             'has_logo'     => $this->Settings_model->logo_path() !== NULL,
+            'shifts'       => $this->Shifts_model->all_active_list(),
             'page_js'      => array('settings'),
         ));
     }

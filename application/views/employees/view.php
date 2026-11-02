@@ -25,6 +25,7 @@ $field = function ($label, $value) {
 			<ul class="nav nav-tabs">
 				<li class="active"><a href="#tab-overview" data-toggle="tab"><?= e(t('emp_tab_overview')) ?></a></li>
 				<?php if ($can_salary): ?><li><a href="#tab-salary" data-toggle="tab" id="tab-salary-link"><?= e(t('emp_tab_salary')) ?></a></li><?php endif; ?>
+				<?php if ($shift_history !== NULL): ?><li><a href="#tab-shift" data-toggle="tab"><?= e(t('emp_tab_shift')) ?></a></li><?php endif; ?>
 				<li><a href="#tab-documents" data-toggle="tab"><?= e(t('emp_tab_documents')) ?></a></li>
 				<li><a href="#tab-pin" data-toggle="tab"><?= e(t('emp_tab_pin')) ?></a></li>
 				<li><a href="#tab-login" data-toggle="tab"><?= e(t('emp_tab_login')) ?></a></li>
@@ -110,6 +111,22 @@ $field = function ($label, $value) {
 						<button type="submit" class="btn btn-primary" id="salary-save"><?= e(t('save')) ?></button>
 					</form>
 					<?php endif; ?>
+				</div>
+				<?php endif; ?>
+
+				<?php if ($shift_history !== NULL): ?>
+				<div class="tab-pane" id="tab-shift">
+					<table class="table table-condensed" id="shift-history">
+						<thead><tr><th><?= e(t('shift_name')) ?></th><th><?= e(t('emp_valid_from')) ?></th><th><?= e(t('emp_valid_to')) ?></th></tr></thead>
+						<tbody>
+						<?php foreach ($shift_history as $h): ?>
+							<tr<?= $h['effective_to'] === NULL ? ' class="success"' : '' ?>><td><?= e($h['shift_name'] . ' (' . substr($h['start_time'], 0, 5) . '-' . substr($h['end_time'], 0, 5) . ')') ?></td>
+								<td><?= e(show_date($h['effective_from'])) ?></td><td><?= $h['effective_to'] === NULL ? e(t('salary_current')) : e(show_date($h['effective_to'])) ?></td></tr>
+						<?php endforeach; ?>
+						<?php if ( ! $shift_history): ?><tr><td colspan="3" class="text-muted"><?= e(t('shift_none')) ?></td></tr><?php endif; ?>
+						</tbody>
+					</table>
+					<?php if (has_permission('rosters_manage') && $current): ?><a href="<?= site_url('employee_shifts/employee/' . $id) ?>" class="btn btn-default btn-sm"><?= e(t('shift_assign')) ?></a><?php endif; ?>
 				</div>
 				<?php endif; ?>
 
