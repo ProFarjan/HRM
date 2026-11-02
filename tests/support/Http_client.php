@@ -120,6 +120,24 @@ class Http_client
         return array($status, (string) substr($raw, $size), (string) substr($raw, 0, $size));
     }
 
+    /** request with a raw body and no CSRF token (the device endpoints: JSON from the service, plain text from ADMS) */
+    public function raw($method, $path, $body = '', array $headers = array())
+    {
+        $ch = curl_init($this->base . ltrim($path, '/'));
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => TRUE, CURLOPT_HEADER => TRUE, CURLOPT_FOLLOWLOCATION => FALSE, CURLOPT_TIMEOUT => 20,
+            CURLOPT_CUSTOMREQUEST => $method, CURLOPT_HTTPHEADER => $headers,
+        ));
+        if ($method === 'POST') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $size = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        curl_close($ch);
+        return array($status, (string) substr($raw, $size), (string) substr($raw, 0, $size));
+    }
+
     public function csrf_token()
     {
         if ($this->cookie('hrm_csrf_cookie') === NULL) {

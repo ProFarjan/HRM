@@ -36,6 +36,7 @@ load_class('Model', 'core');                       // CI_Model + MY_Model, so te
 require_once HRM_ROOT . '/tests/support/Fake_input.php';
 require_once HRM_ROOT . '/tests/support/Hrm_test_case.php';
 require_once HRM_ROOT . '/tests/support/Http_client.php';
+require_once HRM_ROOT . '/tests/support/Device_test_case.php';
 require_once HRM_ROOT . '/tests/support/settings_form.php';
 
 $CI =& get_instance();

@@ -1,0 +1,6 @@
+{"device_name": "Main Gate", "timestamp": "2026-01-20 13:48:44", "batch_number": 1, "total_batches": 1,
+ "records": [
+  {"user_id": "101", "attendance_datetime": "2026-01-20 08:30:15", "auth_method": "1", "auth_method_name": "Finger Print", "attendance_type": "0", "attendance_type_name": "Check-In"},
+  {"user_id": "102", "attendance_datetime": "2026-01-20 08:41:00", "auth_method": "4", "auth_method_name": "Card", "attendance_type": "0", "attendance_type_name": "Check-In"},
+  {"id": "101", "timestamp": "2026-01-20T17:45:00", "auth_method": "1", "attendance_type": "1"}
+ ]}
