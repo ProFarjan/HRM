@@ -1,0 +1,24 @@
+# dependencies
+/vendor/
+
+# local configuration and secrets
+/application/config/database.php
+.env
+
+# runtime output (keep the index.html placeholders)
+/application/logs/*
+!/application/logs/index.html
+/application/cache/*
+!/application/cache/index.html
+/uploads/*
+!/uploads/.htaccess
+!/uploads/index.html
+/tests/_output/*
+!/tests/_output/.gitkeep
+.phpunit.result.cache
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
