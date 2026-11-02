@@ -128,6 +128,25 @@ abstract class Hrm_test_case extends TestCase
         return (int) $this->db->insert_id();
     }
 
+    /** a shift of the current branch; returns the id */
+    protected function insert_shift($code, $start, $end, array $extra = array())
+    {
+        $this->db->insert('shifts', array_merge(array('branch_id' => current_branch_id(), 'shift_name' => 'Shift ' . $code, 'shift_code' => $code,
+            'start_time' => $start, 'end_time' => $end, 'break_duration' => 0, 'working_hours' => 0, 'grace_time' => 0,
+            'is_night' => Shift_calculator::minutes($end) < Shift_calculator::minutes($start) ? 1 : 0, 'status' => 'Active', 'created_at' => date('Y-m-d H:i:s')), $extra));
+        return (int) $this->db->insert_id();
+    }
+
+    protected function assign_shift($employee_id, $shift_id, $from = '2020-01-01')
+    {
+        $this->db->insert('employee_shifts', array('employee_id' => $employee_id, 'shift_id' => $shift_id, 'effective_from' => $from, 'created_at' => date('Y-m-d H:i:s')));
+    }
+
+    protected function attendance_row($employee_id, $date)
+    {
+        return $this->db->get_where('attendance', array('employee_id' => $employee_id, 'attendance_date' => $date))->row_array();
+    }
+
     protected function id_of_result($result)
     {
         $this->assertStringStartsWith('success<<<###>>>', (string) $result, (string) $result);
