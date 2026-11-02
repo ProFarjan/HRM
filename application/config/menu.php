@@ -15,6 +15,12 @@ $config['menu'] = array(
 		array('label' => 'menu_departments', 'url' => 'departments', 'permission' => 'departments_view'),
 		array('label' => 'menu_designations', 'url' => 'designations', 'permission' => 'designations_view'),
 	)),
+	array('label' => 'menu_time', 'icon' => 'fa-clock-o', 'children' => array(
+		array('label' => 'menu_shifts', 'url' => 'shifts', 'permission' => 'shifts_view'),
+		array('label' => 'menu_employee_shifts', 'url' => 'employee_shifts', 'permission' => 'shifts_view'),
+		array('label' => 'menu_rosters', 'url' => 'rosters', 'permission' => 'rosters_manage'),
+		array('label' => 'menu_holidays', 'url' => 'holidays', 'permission' => 'holidays_view'),
+	)),
 	array('label' => 'menu_admin', 'icon' => 'fa-cogs', 'children' => array(
 		array('label' => 'menu_users', 'url' => 'users', 'permission' => 'users_view'),
 		array('label' => 'menu_roles', 'url' => 'roles', 'permission' => 'roles_manage'),

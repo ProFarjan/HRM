@@ -3,3 +3,11 @@
 .login-box-body .alert { margin-bottom: 15px; }
 table.dataTable thead th { white-space: nowrap; }
 .text-money { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* roster grid */
+.roster-grid td { min-width: 96px; padding: 3px !important; vertical-align: top; }
+.roster-grid td select { padding: 2px; height: 26px; }
+.roster-grid td.roster-weekly_off { background: #f4f4f4; }
+.roster-grid td.roster-holiday { background: #fdf2e0; }
+.roster-grid td.roster-changed { outline: 2px solid #f39c12; }
+.roster-grid td.roster-not-employed { opacity: .45; }
+.roster-applies { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
