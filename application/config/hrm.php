@@ -52,7 +52,9 @@ $config['hrm_defaults'] = array(
 );
 
 $config['scoped_tables'] = array(
-	'users' => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'users'    => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'roles'    => array('branch' => NULL, 'own' => NULL, 'module' => NULL),         // company-wide
+	'branches' => array('branch' => NULL, 'own' => NULL, 'module' => NULL),         // company-wide
 );
 
 $config['sequences'] = array(

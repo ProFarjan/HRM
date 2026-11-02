@@ -26,6 +26,18 @@ class Tenant
         return (int) $settings['migration_version'];
     }
 
+    /** schema version of a tenant (0 when it was never migrated) */
+    public static function version($database)
+    {
+        $db = self::switch_to($database);
+        $debug = $db->db_debug;
+        $db->db_debug = FALSE;
+        $query = $db->query('SELECT version FROM migrations LIMIT 1');
+        $db->db_debug = $debug;
+        $row = $query ? $query->row() : NULL;
+        return $row ? (int) $row->version : 0;
+    }
+
     /** make $database the current connection ($CI->db) and clear every per-tenant request cache */
     public static function switch_to($database)
     {

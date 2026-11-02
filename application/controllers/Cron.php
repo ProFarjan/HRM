@@ -40,14 +40,27 @@ class Cron extends CI_Controller
     /**
      * php index.php migrate                  -> $config['migration_version'] for every tenant
      * php index.php migrate version 12       -> a specific version (down() must work)
+     * php index.php migrate status           -> current / expected version of every tenant
      * TENANT_DB=hrm_client_xyz php index.php migrate
      */
     public function migrate($action = NULL, $version = NULL)
     {
         $target = NULL;
+        if ($action === 'status') {
+            $latest = Tenant::latest_version();
+            foreach (Tenant::names() as $database) {
+                try {
+                    $current = Tenant::version($database);
+                    echo sprintf("%s: version %d of %d %s\n", $database, $current, $latest, $current === $latest ? 'up to date' : 'PENDING');
+                } catch (RuntimeException $e) {
+                    echo $database . ': ' . $e->getMessage() . "\n";
+                }
+            }
+            exit(0);
+        }
         if ($action !== NULL) {
             if ($action !== 'version' || $version === NULL || ! ctype_digit((string) $version)) {
-                fwrite(STDERR, "Usage: php index.php migrate [version N]\n");
+                fwrite(STDERR, "Usage: php index.php migrate [version N | status]\n");
                 exit(2);
             }
             $target = (int) $version;

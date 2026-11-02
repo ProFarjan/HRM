@@ -73,8 +73,78 @@
 		}, 15000);
 	}
 
+	// ---- model results: "success", "success<<<###>>>id" or an error text (one problem per line) --------------------
+	cfg.ok = function (text) {
+		text = String(text);
+		if (text.indexOf('success') === 0) { return true; }
+		if (window.toastr) { window.toastr.error($('<div>').text(text).html().replace(/\n/g, '<br>')); }
+		return false;
+	};
+
+	// ---- forms posted by AJAX: <form class="hrm-ajax-form" data-redirect="..." | data-reload="1"> ---------------------
+	$(document).on('submit', 'form.hrm-ajax-form', function (e) {
+		e.preventDefault();
+		var $form = $(this), $btn = $form.find('[type=submit]').prop('disabled', true);
+		$.ajax({ url: $form.attr('action'), type: 'POST', data: new window.FormData(this), processData: false, contentType: false, dataType: 'text' })
+			.done(function (text) {
+				if (!cfg.ok(text)) { return; }
+				window.toastr.success(cfg.savedText || 'Saved');
+				if ($form.data('redirect')) { window.location = $form.data('redirect'); }
+				else if ($form.data('reload')) { window.setTimeout(function () { window.location.reload(); }, 400); }
+				else { $form[0].reset(); }
+			})
+			.fail(function (xhr) { if (xhr.status !== 401 && xhr.status !== 403 && xhr.status !== 405) { cfg.ok(xhr.responseText || 'Error'); } })
+			.always(function () { $btn.prop('disabled', false); });
+	});
+
+	// ---- action buttons: <button class="hrm-post" data-url data-confirm data-redirect data-reload> ----------------
+	$(document).on('click', '.hrm-post', function () {
+		var $b = $(this);
+		if ($b.data('confirm') && !window.confirm($b.data('confirm'))) { return; }
+		$.ajax({ url: $b.data('url'), type: 'POST', dataType: 'text' }).done(function (text) {
+			if (!cfg.ok(text)) { return; }
+			window.toastr.success(cfg.savedText || 'Saved');
+			if ($b.data('redirect')) { window.location = $b.data('redirect'); }
+			else if ($b.data('reload')) { window.setTimeout(function () { window.location.reload(); }, 400); }
+			else if ($b.data('table')) { $($b.data('table')).DataTable().ajax.reload(null, false); }
+		});
+	});
+
+	// ---- server-side list: cfg.table('#id', columns, '#filter-form') ------------------------------------------------
+	cfg.table = function (selector, columns, filterForm, options) {
+		var $t = $(selector);
+		var dt = $t.DataTable($.extend({
+			ajax: {
+				url: $t.data('url'), type: 'POST',
+				data: function (d) {
+					if (filterForm) { $.each($(filterForm).serializeArray(), function (i, f) { d[f.name] = f.value; }); }
+				},
+				error: function (xhr) { if (xhr.status === 422) { cfg.ok(xhr.responseText); } }
+			},
+			columns: columns
+		}, options || {}));
+		if (filterForm) {
+			$(filterForm).on('change', 'select', function () { dt.ajax.reload(); });
+			$(filterForm).on('submit', function (e) { e.preventDefault(); dt.ajax.reload(); });
+		}
+		return dt;
+	};
+
+	// action cell helpers (ids are integers from the server; urls come from data-* attributes)
+	cfg.editLink = function (url, id) {
+		return url ? '<a class="btn btn-xs btn-default" href="' + url + '/' + parseInt(id, 10) + '"><i class="fa fa-pencil"></i></a>' : '';
+	};
+
+	// PHP date format (setting date_format) -> bootstrap-datepicker format
+	function pickerFormat(php) {
+		return String(php || 'd-m-Y').replace('d', 'dd').replace('m', 'mm').replace('Y', 'yyyy');
+	}
+
 	$(function () {
 		initICheck(document);
 		if (cfg.idleMinutes > 0) { startIdleTimer(cfg.idleMinutes); }
+		if ($.fn.datepicker) { $('.datepicker').datepicker({ format: pickerFormat(cfg.dateFormat), autoclose: true, todayHighlight: true }); }
+		if ($.fn.select2) { $('.select2').select2(); }
+		$('#branch-switch').on('change', function () { $('#branch-switch-form').submit(); });
 	});
 }(window.jQuery, window));

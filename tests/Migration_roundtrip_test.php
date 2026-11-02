@@ -7,6 +7,14 @@ class Migration_roundtrip_test extends Hrm_test_case
 {
     protected $use_transaction = FALSE;
 
+    /** version number of the migration that seeds the admin (NNN_seed_admin.php) */
+    protected function seed_version()
+    {
+        $files = glob(APPPATH . 'migrations/*_seed_admin.php');
+        $this->assertCount(1, $files);
+        return (int) substr(basename($files[0]), 0, 3);
+    }
+
     protected function version()
     {
         return (int) get_instance()->db->query('SELECT version FROM migrations')->row()->version;
@@ -36,12 +44,21 @@ class Migration_roundtrip_test extends Hrm_test_case
         list($ok, $message, $from, $to) = Tenant::migrate('hrm_test', $latest - 1);
         $this->assertTrue($ok, $message);
         $this->assertSame(array($latest, $latest - 1), array($from, $to));
-        $this->assertSame(0, get_instance()->db->query("SELECT COUNT(*) AS c FROM users WHERE username = 'admin'")->row()->c + 0, 'down() removed the seeded admin');
 
         list($ok, $message, $from, $to) = Tenant::migrate('hrm_test');
         $this->assertTrue($ok, $message);
         $this->assertSame(array($latest - 1, $latest), array($from, $to));
         $this->assertSame($before, $this->app_tables());
+    }
+
+    public function test_down_below_the_seed_removes_the_admin_and_up_restores_it()
+    {
+        $seed = $this->seed_version();
+        list($ok, $message) = Tenant::migrate('hrm_test', $seed - 1);
+        $this->assertTrue($ok, $message);
+        $this->assertSame(0, (int) get_instance()->db->query("SELECT COUNT(*) AS c FROM users WHERE username = 'admin'")->row()->c, 'down() removed the seeded admin');
+        list($ok, $message) = Tenant::migrate('hrm_test');
+        $this->assertTrue($ok, $message);
         $this->assertSame(1, (int) get_instance()->db->query("SELECT COUNT(*) AS c FROM users WHERE username = 'admin'")->row()->c, 'the seed ran again');
     }
 
@@ -136,7 +153,7 @@ class Migration_roundtrip_test extends Hrm_test_case
     {
         // Run the seed in a child process WITHOUT HRM_ADMIN_PASSWORD: a random password is printed on the console.
         // Done on hrm_test itself (no extra privileges needed): remove the seed, re-run it in the child, restore it afterwards.
-        $latest = Tenant::latest_version();
+        $seed = $this->seed_version();
         $env = array_filter(array_merge($_SERVER, array('CI_ENV' => 'testing', 'TENANT_DB' => 'hrm_test')), 'is_string');
         unset($env['HRM_ADMIN_PASSWORD'], $env['HRM_ADMIN_USER']);
         $run = function () use ($env) {
@@ -145,7 +162,7 @@ class Migration_roundtrip_test extends Hrm_test_case
             return array($out, proc_close($proc));
         };
         try {
-            list($ok, $message) = Tenant::migrate('hrm_test', $latest - 1);
+            list($ok, $message) = Tenant::migrate('hrm_test', $seed - 1);
             $this->assertTrue($ok, $message);
 
             list($out, $code) = $run();
@@ -156,17 +173,33 @@ class Migration_roundtrip_test extends Hrm_test_case
             $this->assertTrue(password_verify($m[1], $user['password_hash']), 'the printed password is the real one');
             $this->assertSame(1, (int) $user['must_change_password'], 'a generated password must be changed at first login');
 
-            list($ok, $message) = Tenant::migrate('hrm_test', $latest - 1);           // remove it again and run twice
+            list($ok, $message) = Tenant::migrate('hrm_test', $seed - 1);           // remove it again and run twice
             $this->assertTrue($ok, $message);
             list($out, ) = $run();
             list($out_again, ) = $run();
             $this->assertStringContainsString('password:', $out);
             $this->assertStringNotContainsString('password:', $out_again, 'the password is shown once, never on a re-run');
         } finally {
-            Tenant::migrate('hrm_test', $latest - 1);
+            Tenant::migrate('hrm_test', $seed - 1);
             putenv('HRM_ADMIN_PASSWORD=' . HRM_TEST_ADMIN_PASSWORD);
             $result = Tenant::migrate('hrm_test');
             $this->assertTrue($result[0], $result[1]);
         }
+    }
+
+    public function test_migrate_status_reports_every_tenant()
+    {
+        $env = array_filter(array_merge($_SERVER, array('CI_ENV' => 'testing', 'TENANT_DB' => 'hrm_test')), 'is_string');
+        $proc = proc_open(array(PHP_BINARY, HRM_ROOT . '/index.php', 'migrate', 'status'), array(1 => array('pipe', 'w'), 2 => array('pipe', 'w')), $pipes, HRM_ROOT, $env);
+        $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        $this->assertSame(0, proc_close($proc), $out);
+        $latest = Tenant::latest_version();
+        $this->assertSame("hrm_test: version $latest of $latest up to date", trim($out));
+
+        $env['TENANT_DB'] = 'hrm_no_such_db';
+        $proc = proc_open(array(PHP_BINARY, HRM_ROOT . '/index.php', 'migrate', 'status'), array(1 => array('pipe', 'w'), 2 => array('pipe', 'w')), $pipes, HRM_ROOT, $env);
+        $out = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+        proc_close($proc);
+        $this->assertStringContainsString('hrm_no_such_db: Cannot connect', $out);
     }
 }

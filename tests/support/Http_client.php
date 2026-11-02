@@ -91,6 +91,35 @@ class Http_client
         return $this->request('POST', $path, $post, $headers);
     }
 
+    /** multipart POST (file uploads); $files = field => local path. Nested arrays are flattened to name[i]. */
+    public function post_multipart($path, array $fields, array $files = array())
+    {
+        $flat = array('hrm_csrf' => $this->csrf_token());
+        foreach ($fields as $k => $v) {
+            if (is_array($v)) {
+                foreach (array_values($v) as $i => $item) {
+                    $flat[$k . '[' . $i . ']'] = $item;
+                }
+            } else {
+                $flat[$k] = $v;
+            }
+        }
+        foreach ($files as $k => $file) {
+            $flat[$k] = new CURLFile($file, 'application/octet-stream', basename($file));
+        }
+        $ch = curl_init($this->base . ltrim($path, '/'));
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => TRUE, CURLOPT_HEADER => TRUE, CURLOPT_FOLLOWLOCATION => FALSE,
+            CURLOPT_COOKIEJAR => $this->jar, CURLOPT_COOKIEFILE => $this->jar, CURLOPT_TIMEOUT => 20,
+            CURLOPT_POST => TRUE, CURLOPT_POSTFIELDS => $flat, CURLOPT_HTTPHEADER => array('X-Requested-With: XMLHttpRequest'),
+        ));
+        $raw = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $size = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        curl_close($ch);
+        return array($status, (string) substr($raw, $size), (string) substr($raw, 0, $size));
+    }
+
     public function csrf_token()
     {
         if ($this->cookie('hrm_csrf_cookie') === NULL) {

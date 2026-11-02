@@ -201,7 +201,7 @@ class Permission_scope_test extends Hrm_test_case
         $this->assertFalse($this->CI->Access_model->record_in_scope('users', $foreign), 'another branch');
         $this->assertFalse($this->CI->Access_model->record_in_scope('users', 0));
         $this->assertFalse($this->CI->Access_model->record_in_scope('users', 'abc'));
-        $this->assertFalse($this->CI->Access_model->record_in_scope('roles', 1), 'table not registered');
+        $this->assertFalse($this->CI->Access_model->record_in_scope('login_attempts', 1), 'table not registered');
         $this->assertFalse($this->CI->Access_model->record_in_scope('users; DROP TABLE users', 1));
         set_current_user(NULL);
         $this->assertFalse($this->CI->Access_model->record_in_scope('users', $me['id']), 'nobody logged in');

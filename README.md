@@ -10,7 +10,8 @@ server-side DataTables, MySQL 5.7+ / MariaDB 10.3+ (InnoDB, utf8mb4). One databa
 **[CLAUDE.md](CLAUDE.md) is the specification** (architecture, guardrails G1-G8, domain model, business rules, device
 integration, permissions, the defect register P1-P20 and the build order). Read it before changing anything.
 
-Status: build step 0 (guardrails + application shell). Business modules arrive step by step, see "Build order" in CLAUDE.md.
+Status: build steps 0-1 (guardrails, application shell, login, users, roles, branches, settings, audit log). Business modules arrive
+step by step, see "Build order" in CLAUDE.md.
 
 ## Requirements
 
@@ -39,7 +40,9 @@ php index.php migrate                                                          #
    `$HRM_ADMIN_PASSWORD` when set, otherwise a random one **printed once** on the console (you must change it at first login).
    `HRM_ADMIN_USER` overrides the username. Nothing secret is committed.
    One tenant only: `TENANT_DB=hrm_client_xyz php index.php migrate`. A specific version: `php index.php migrate version 6`.
-3. Open the site and log in. Set `HRM_ENCRYPTION_KEY` (environment) for signed links in later steps.
+   Where every tenant stands: `php index.php migrate status`.
+3. Open the site and log in. Under **Administration**: users, roles (permission grid), branches, settings (six tabs) and the audit log.
+   Set `HRM_ENCRYPTION_KEY` (environment) for signed links in later steps.
 4. Make sure `application/logs`, `application/cache` and `uploads` are writable by the web server. `uploads/` is denied by
    `.htaccess`; files are served only through a controller.
 
@@ -65,6 +68,15 @@ git config core.hooksPath tools/git-hooks      # run the scan (and php -l) befor
 composer lint                      # php -l on every PHP file
 ```
 
+Browser checks (Playwright with the bundled Chromium; screenshots land in `docs/step-N/`):
+
+```bash
+TENANT_DB=hrm_dev HRM_E2E_PASSWORD='E2e#Passw0rd' php tests/e2e/seed_users.php      # users nopriv / viewer
+TENANT_DB=hrm_dev php -S 127.0.0.1:8099 tests/support/router.php &
+HRM_ADMIN_PASSWORD=... node tests/e2e/shell_smoke.js
+HRM_ADMIN_PASSWORD=... node tests/e2e/admin_pages.js
+```
+
 The test bootstrap boots CodeIgniter against **`hrm_test`** (it refuses any database whose name does not end in `_test`),
 drops all its tables and runs every migration. Guardrail tests run first: `Guardrail_static_checks_test`,
 `Guardrail_permission_coverage_test` (reflection over all controllers plus an HTTP smoke test: every mapped route as a
@@ -75,9 +87,9 @@ user without permissions is 403), `Input_validator_test`. The HTTP tests start `
 ```
 application/config      config, database(.example), hrm (setting defaults), permissions (catalog), menu (sidebar)
 application/core        MY_Controller (default-deny _remap), Ess_Controller, Api_Controller, MY_Model, Default_deny, hrm_autoload
-application/controllers Auth, Cron, Dashboard (one per module; each declares $permission_map)
+application/controllers Auth, Cron, Dashboard, Users, Roles, Branches, Settings, Audit (each declares $permission_map)
 application/models      all SQL lives here
-application/libraries   Input_validator, Tx, Idempotency, Tenant, Hrm_migration
+application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration
 application/helpers     hrm (settings, dates, money), permission, sequence
 application/migrations  NNN_name.php, sequential, idempotent, working down()
 theme/                  AdminLTE 2 and plugins as plain files, theme/js/app.js (CSRF, iCheck, idle logout)

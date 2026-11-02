@@ -58,7 +58,8 @@ $config['permission_catalog'] = array(
 /*
 | Non-permission tokens allowed as $permission_map values.
 |   @any    any logged-in user              @self    Ess_Controller only (the model scopes to the employee)
+|   @system the system Admin role only (roles.is_system = 1), e.g. switching the working branch
 |   @public no login needed (Auth)          @login   logged in, checked by the controller itself (Auth)
 |   @cli     command line only (Cron)      @device  authenticated by a device key / registered serial (Api, Iclock)
 */
-$config['permission_tokens'] = array('@any', '@self', '@public', '@login', '@cli', '@device');
+$config['permission_tokens'] = array('@any', '@system', '@self', '@public', '@login', '@cli', '@device');
