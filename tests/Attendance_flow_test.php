@@ -21,6 +21,7 @@ class Attendance_flow_test extends Hrm_test_case
         foreach (array('attendance', 'attendance_punches', 'audit_log') as $t) {
             $db->query('DELETE FROM ' . $t);
         }
+        $db->query('UPDATE users SET employee_id = NULL WHERE employee_id IS NOT NULL');       // else the employees below are protected by their foreign keys
         $db->query('DELETE FROM employees');
         if (self::$users) {
             $db->where_in('id', self::$users)->delete('users');
