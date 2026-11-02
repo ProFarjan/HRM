@@ -14,7 +14,7 @@
             <file>tests/Guardrail_permission_coverage_test.php</file>
             <file>tests/Input_validator_test.php</file>
         </testsuite>
-        <testsuite name="foundation-and-administration">
+        <testsuite name="foundation-administration-organisation">
             <file>tests/Tx_test.php</file>
             <file>tests/Idempotency_test.php</file>
             <file>tests/Sequences_test.php</file>
@@ -29,6 +29,11 @@
             <file>tests/Settings_test.php</file>
             <file>tests/Audit_test.php</file>
             <file>tests/Admin_flow_test.php</file>
+            <file>tests/Organisation_units_test.php</file>
+            <file>tests/Employees_test.php</file>
+            <file>tests/Employee_pin_test.php</file>
+            <file>tests/Salary_structure_test.php</file>
+            <file>tests/Organisation_flow_test.php</file>
             <file>tests/Migration_roundtrip_test.php</file>
         </testsuite>
     </testsuites>

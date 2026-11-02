@@ -191,7 +191,7 @@ if (!$v->ok()) { return $v->message(); }                       // all errors at 
 ```
 Other getters: `flag` (checkbox -> 0/1), `secret` (password: not trimmed or filtered, length only), `token` (the `request_token` uuid),
 `int_list` (id arrays), `enum_list` (checkbox groups of strings, e.g. permission keys), `email`, `image` (upload: type from the file
-contents via `getimagesize`, size cap, `is_uploaded_file`). DataTables parameters are read only by `Datatable_request` (sort column by
+contents via `getimagesize`, size cap, `is_uploaded_file`), `document` (PDF by its `%PDF-` signature, or PNG/JPEG; original name cleaned). DataTables parameters are read only by `Datatable_request` (sort column by
 index from a whitelist, page size clamped to the screen cap, search text <= 100 characters); list cells are escaped with `e()` in the model. `text()` refuses anything that looks like an HTML tag and control characters; everything else (quotes, `&`, SQL-looking
 strings, Bangla) is accepted and stored verbatim.
 Rules: no `extract()`; no `$_POST` access in models; no request value inside an SQL string (Query Builder, or `?` bindings with an
@@ -286,11 +286,12 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
   reporting_manager_id, employment_type ENUM('Permanent','Contract','Temporary','Part-time','Probation'), join_date,
   confirmation_date*, exit_date*, exit_reason*, status ENUM('Active','On Leave','Resigned','Terminated'), blood_group,
   emergency_contact_name, emergency_contact_number, bank_name, bank_account_number, bank_branch, national_id*, tin*,
-  **device_pin*** (ZKTeco user id; `UNIQUE (branch_id, device_pin)`; NULL for employees without a card/finger), user_id*
-  (nullable link to `users`), created_by, created_at, updated_at.
-- `employee_pin_history`* (employee_id, device_pin, valid_from, valid_to): on exit/re-hire/PIN change the old PIN moves here and
+  **device_pin*** (ZKTeco user id, digits 1-9; `UNIQUE (branch_id, device_pin)`; NULL for employees without a card/finger),
+  device_pin_from* (date the current PIN started), user_id* (nullable link to `users`, unique; `users.employee_id` is the other side,
+  both written together), created_by, created_at, updated_at.
+- `employee_pin_history`* (branch_id*, employee_id, device_pin, valid_from, valid_to; index `(branch_id, device_pin, valid_from)`): on exit/re-hire/PIN change the old PIN moves here and
   `employees.device_pin` is cleared, so a PIN can be reused later and late punches of a leaver still find their owner by date (P5).
-- `employee_documents`* (id, employee_id, title, file, expires_on, created_at).
+- `employee_documents`* (id, employee_id, title, file (random name), original_name, expires_on, created_by, created_at; deleted with the employee).
 - `users` (id, username unique, password_hash, employee_id nullable, role_id, branch_id, status, must_change_password, last_login_at),
   `roles` (id, role_name, is_system), `role_permissions` (role_id, permission_key; unique pair), `login_attempts`*.
 
@@ -335,7 +336,7 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
 ### Pay
 - `salary_structures` (id, employee_id, basic_salary, house_rent, medical_allowance, transport_allowance, other_allowances,
   gross_salary, pf_deduction, esi_deduction, tax_deduction, other_deductions, net_salary, effective_from, effective_to, is_active,
-  created_by). Saving a new one closes the previous (`effective_to = new.effective_from - 1 day`). **Payroll never reads `is_active`;
+  created_by, created_at; `UNIQUE (employee_id, effective_from)`). Saving a new one closes the previous (`effective_to = new.effective_from - 1 day`). **Payroll never reads `is_active`;
   it reads the structure whose dates cover the month (P20).**
 - `payroll` (id, branch_id, employee_id, payroll_month, payroll_year, salary_structure_id*, basic_salary, hra, medical_allowance,
   transport_allowance, other_allowances, overtime_amount, bonus, incentive, gross_salary, pf_deduction, esi_deduction, tax_deduction,
@@ -643,6 +644,32 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
 - **Audit viewer** (`audit_view`): rows of the working branch (rows without a branch only for the Admin), date range default 7 days and
   at most 366, whitelisted sort, three queries per page (`Audit_test`).
 
+### Organisation (build step 2)
+- Departments and designations: code unique per branch (upper case), deactivate via status, delete only while no employee uses
+  them. A department head is a current employee of the branch (`scope_department` reads it).
+- Employees: code unique per branch; left empty it becomes `next_code('employee')` = `EMP-nnnn`. Department, designation and manager
+  are `ref()`-checked against the branch; a reporting line may not loop. Status `Active` / `On Leave` on the form; `Resigned` /
+  `Terminated` only through **exit**. Delete only an employee without other records (salary, PIN history, login, subordinates, head of
+  a department, and later attendance/payroll) - otherwise record an exit.
+- **Sensitive data:** `bank_account_number`, `national_id`, `tin` are masked to the last 4 characters (pages, lists, audit) unless
+  `employees_sensitive`; without it the form shows the masked text and a save keeps the stored values (`Employees_test`).
+- **Salary** (`employees_salary` to see it, plus `employees_edit` to change it): gross and net are computed on the server; a new
+  structure must start after the latest one and closes it (`effective_to = new.effective_from - 1 day`); only the latest can be removed
+  (the previous one reopens; payroll use will block it from step 9). `Salary_model::covering($employee, $from, $to)` returns the
+  structures in force with their segment days - payroll reads that, never `is_active` (P20; `Salary_structure_test`).
+- **Device PIN** (groundwork for P5, `Employee_pin_test`): a new PIN starts on the join date or the chosen date; a change moves the old
+  PIN to `employee_pin_history` (valid_to = day before the new one); a change dated on/before the current PIN's start is a correction
+  (no history). A PIN may not start on a date that a previous owner's history still covers. `Employees_model::pin_owner($branch, $pin,
+  $date)` finds the owner on a date (current holder from `device_pin_from`, else the history) - the punch ingestor uses it in step 4/5.
+- **Exit** (date >= join and >= PIN start, Resigned/Terminated, reason): the PIN moves to the history with valid_to = exit date, the
+  linked login is deactivated (never your own, never the last Admin). **Re-hire**: date after the exit becomes the new join date.
+- Documents and photo: `Input_validator::document()` / `image()`, random names under `uploads/employees/`, served by
+  `Employees::document` (attachment) and `Employees::photo` after the permission and branch checks.
+- Login link: an active, unlinked login of the branch, within the actor's permissions (`Users_model::check_manageable`), needs
+  `users_edit` as well; both `users.employee_id` and `employees.user_id` are written in one transaction.
+- Not in step 2 (later steps): **Enrol on device** / `delete_user` command queue (step 5); the profile's attendance, leave balance,
+  advances, loans and payroll sections (steps 4-9).
+
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
   history, documents, device PIN + **Enrol on device** -> queues `create_user`), profile (attendance, leave balance, advances, loans,
@@ -805,7 +832,7 @@ regenerating or editing a past month uses the current structure.
 0. **Guardrails first** *(done)*: CI3 skeleton, `MY_Controller` (default-deny `_remap`), `Input_validator`, `Tx`, `Idempotency`, `sequences`,
    `MY_Model` scope/audit, `tests/static_checks.php`, the guardrail tests (P6, P7, P11, P12, P13, P15, P18), phpunit bootstrap on `hrm_test`.
 1. Auth (login, `password_hash`, throttle, idle logout), roles/permissions, branches, settings, layout, audit log, migration runner per tenant. *(done)*
-2. Organisation: departments, designations, employees (documents, salary structure history, PIN + PIN history), users linked to employees.
+2. Organisation: departments, designations, employees (documents, salary structure history, PIN + PIN history), users linked to employees. *(done)*
 3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests.
 4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14).
 5. Devices: `Api::pull_from_machine` (Windows Service contract) and `Iclock` (ADMS), device keys, devices page, pending SNs, unmatched punches,
@@ -823,6 +850,8 @@ regenerating or editing a past month uses the current structure.
   (also the 403 smoke test with a no-permission user), `Input_validator_test`, `Report_query_budget_test`.
 - **Administration tests (step 1):** `Users_test`, `Roles_test`, `Branches_test`, `Settings_test`, `Audit_test`, `Datatable_request_test`,
   `Admin_flow_test` (HTTP: landing page, branch switch, logo upload, CSRF on lists, by-id 403).
+- **Organisation tests (step 2):** `Organisation_units_test`, `Employees_test` (incl. masking and a real `scope_department`),
+  `Employee_pin_test`, `Salary_structure_test`, `Organisation_flow_test` (HTTP: salary/sensitive permissions, documents, photo, branch 403).
 - **Behaviour tests:** `Shift_calculator_test` (normal, grace, night shift, holiday work); `Punch_ingestion_test`; `Day_close_test`;
   `Leave_workflow_test`; `Overtime_source_test`; `Payroll_calculator_test` (every formula line, auto vs manual, late conversion, joiner/leaver,
   mid-month raise, advance + loan); `Payroll_missing_rows_test`; `Payroll_tamper_test`; `Payroll_payment_atomicity_test`;
@@ -837,6 +866,8 @@ regenerating or editing a past month uses the current structure.
   and never answer 200 when punches were not stored.
 - ZKTeco device time is local and has no timezone; interpret it in the device's (or branch's) timezone, never the server's.
 - iCheck replaces checkboxes: bind `ifChanged` for logic, read `:checked` at submit.
+- bootstrap-datepicker re-reads its field only on `keyup`; `app.js` also updates it on `input`/`paste`, otherwise a pasted or
+  autofilled date is wiped when the field loses focus.
 - Bangla names: use `mb_*` string functions (`ucfirst()` on UTF-8 produced invalid JSON for DataTables in pos-retails).
 - Keep `config/database.php` and any tenant routing JSON out of git; ship `database.example.php`.
 - CodeIgniter 3 on PHP 8.2+ emits "dynamic property" deprecations from its own core; declare properties in your classes and keep

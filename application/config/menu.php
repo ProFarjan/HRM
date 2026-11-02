@@ -10,6 +10,11 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 */
 $config['menu'] = array(
 	array('label' => 'menu_dashboard', 'icon' => 'fa-dashboard', 'url' => 'dashboard', 'permission' => 'dashboard_hr'),
+	array('label' => 'menu_organisation', 'icon' => 'fa-sitemap', 'children' => array(
+		array('label' => 'menu_employees', 'url' => 'employees', 'permission' => 'employees_view'),
+		array('label' => 'menu_departments', 'url' => 'departments', 'permission' => 'departments_view'),
+		array('label' => 'menu_designations', 'url' => 'designations', 'permission' => 'designations_view'),
+	)),
 	array('label' => 'menu_admin', 'icon' => 'fa-cogs', 'children' => array(
 		array('label' => 'menu_users', 'url' => 'users', 'permission' => 'users_view'),
 		array('label' => 'menu_roles', 'url' => 'roles', 'permission' => 'roles_manage'),

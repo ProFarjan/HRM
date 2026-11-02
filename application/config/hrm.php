@@ -55,6 +55,9 @@ $config['scoped_tables'] = array(
 	'users'    => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
 	'roles'    => array('branch' => NULL, 'own' => NULL, 'module' => NULL),         // company-wide
 	'branches' => array('branch' => NULL, 'own' => NULL, 'module' => NULL),         // company-wide
+	'departments'  => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'designations' => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
+	'employees'    => array('branch' => 'branch_id', 'own' => NULL, 'module' => NULL),
 );
 
 $config['sequences'] = array(
@@ -63,6 +66,7 @@ $config['sequences'] = array(
 	'advance'      => 'ADV-{n}',
 	'payslip'      => 'PS-{Ym}-{n}',
 	'loan_payment' => 'LP-{n}',
+	'employee'     => 'EMP-{n}',          // used when the employee code is left blank
 );
 $config['sequence_pad'] = 4;
 
