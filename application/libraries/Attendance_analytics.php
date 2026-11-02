@@ -10,6 +10,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  *  - attendance % = present / expected (NULL when nothing was expected);
  *  - late day  = a Present / Half-day row with late_minutes > 0;  missing check-out = Present with a check-in and no check-out on a
  *    day before today (today the person may still be at work);
+ *  - incomplete duty period = on a split-shift day before today, a duty period with no punches or no check-out (periods come with the row);
  *  - no record = a day of the employee's employment, before today, without any attendance row (the day close has not run for it);
  *  - absence streak = consecutive Absent rows; Holiday and Weekly Off rows between them do not break it, any other status does.
  */
@@ -96,6 +97,15 @@ class Attendance_analytics
                     $s['missing_out']++;
                     $s['missing_rows'][] = $r;
                 }
+                if ($worked && $d < $today && isset($r['periods']) && count($r['periods']) > 1) {
+                    foreach ($r['periods'] as $period) {
+                        if ($period['state'] !== 'complete') {
+                            $s['incomplete']++;
+                            $s['incomplete_rows'][] = $r;
+                            break;
+                        }
+                    }
+                }
                 if ($worked) {
                     if ($r['check_in'] !== NULL) {
                         $in_minutes[] = self::minutes($r['check_in']);
@@ -120,9 +130,9 @@ class Attendance_analytics
         }
 
         $totals = self::blank();
-        unset($totals['absent_dates'], $totals['late_rows'], $totals['ot_rows'], $totals['missing_rows'], $totals['no_record_dates']);
+        unset($totals['absent_dates'], $totals['late_rows'], $totals['ot_rows'], $totals['missing_rows'], $totals['incomplete_rows'], $totals['no_record_dates']);
         foreach ($out as $s) {
-            foreach (array('present', 'absent', 'leave', 'holiday', 'weekly_off', 'half', 'late_days', 'late_minutes', 'early_minutes', 'ot', 'ot_days', 'hours', 'missing_out', 'no_record', 'expected') as $k) {
+            foreach (array('present', 'absent', 'leave', 'holiday', 'weekly_off', 'half', 'late_days', 'late_minutes', 'early_minutes', 'ot', 'ot_days', 'hours', 'missing_out', 'incomplete', 'no_record', 'expected') as $k) {
                 $totals[$k] += $s[$k];
             }
         }
@@ -191,6 +201,9 @@ class Attendance_analytics
         if ($totals['missing_out'] > 0) {
             $items[] = array('type' => 'warning', 'icon' => 'fa-sign-out', 'key' => 'ins_missing', 'args' => array((int) $totals['missing_out']));
         }
+        if ($totals['incomplete'] > 0) {
+            $items[] = array('type' => 'warning', 'icon' => 'fa-columns', 'key' => 'ins_incomplete', 'args' => array((int) $totals['incomplete']));
+        }
         if ($totals['no_record'] > 0) {
             $items[] = array('type' => 'danger', 'icon' => 'fa-database', 'key' => 'ins_no_record', 'args' => array((int) $totals['no_record']));
         }
@@ -213,6 +226,28 @@ class Attendance_analytics
                 'args' => array(show_date($worst[0]) . ' (' . date('D', strtotime($worst[0])) . ')', rtrim(rtrim(number_format($worst[2]['present'], 1, '.', ''), '0'), '.'), (int) $worst[2]['expected']));
         }
         return $items;
+    }
+
+    /**
+     * Why a day is in the missing check-out report: "No check-out" (Present, check-in, no check-out) and / or, on a split-shift day, which
+     * duty period has no punches ("Duty period 2: no punches") or no check-out. The open last period is the "No check-out" already named.
+     */
+    public static function missing_reason(array $r)
+    {
+        $parts = array();
+        $no_out = $r['status'] === 'Present' && $r['check_in'] !== NULL && $r['check_out'] === NULL;
+        if ($no_out) {
+            $parts[] = t('rep_reason_no_out');
+        }
+        $periods = isset($r['periods']) && count($r['periods']) > 1 ? array_values($r['periods']) : array();
+        foreach ($periods as $i => $p) {
+            if ($p['state'] === 'missed') {
+                $parts[] = sprintf(t('rep_reason_period_missed'), (int) $p['segment_no']);
+            } elseif ($p['state'] === 'open' && ! ($no_out && $i === count($periods) - 1)) {
+                $parts[] = sprintf(t('rep_reason_period_open'), (int) $p['segment_no']);
+            }
+        }
+        return implode('; ', $parts);
     }
 
     /** every date from..to (Y-m-d) */
@@ -246,7 +281,7 @@ class Attendance_analytics
     protected static function blank()
     {
         return array('present' => 0.0, 'absent' => 0.0, 'leave' => 0, 'holiday' => 0, 'weekly_off' => 0, 'half' => 0, 'late_days' => 0, 'late_minutes' => 0, 'late_max' => 0,
-            'early_minutes' => 0, 'ot' => 0.0, 'ot_days' => 0, 'hours' => 0.0, 'missing_out' => 0, 'no_record' => 0, 'expected' => 0.0, 'pct' => NULL,
-            'avg_in' => '', 'avg_out' => '', 'max_streak' => 0, 'absent_dates' => array(), 'late_rows' => array(), 'ot_rows' => array(), 'missing_rows' => array(), 'no_record_dates' => array());
+            'early_minutes' => 0, 'ot' => 0.0, 'ot_days' => 0, 'hours' => 0.0, 'missing_out' => 0, 'incomplete' => 0, 'no_record' => 0, 'expected' => 0.0, 'pct' => NULL,
+            'avg_in' => '', 'avg_out' => '', 'max_streak' => 0, 'absent_dates' => array(), 'late_rows' => array(), 'ot_rows' => array(), 'missing_rows' => array(), 'incomplete_rows' => array(), 'no_record_dates' => array());
     }
 }

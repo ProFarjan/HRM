@@ -69,7 +69,18 @@ class Attendance_model extends MY_Model
         $this->db->select('a.*, e.employee_code, e.first_name, e.last_name, d.department_name');
         $dt->apply($this->db);
         $rows = array();
-        foreach ($this->db->get()->result_array() as $r) {
+        $list = $this->db->get()->result_array();
+        $periods = Attendance_periods::for_rows(array_column($list, 'id'));
+        foreach ($list as $r) {
+            $own = isset($periods[(int) $r['id']]) ? $periods[(int) $r['id']] : array();
+            $split = count($own) > 1;
+            $stack = function ($field) use ($own) {
+                $parts = array();
+                foreach ($own as $p) {
+                    $parts[] = $p[$field] === NULL ? '<span class="text-muted">' . ($field === 'check_out' && $p['check_in'] !== NULL ? '?' : '-') . '</span>' : e(substr($p[$field], 0, 5));
+                }
+                return implode('<br>', $parts);
+            };
             $rows[] = array(
                 'id'         => (int) $r['id'],
                 'date'       => e(show_date($r['attendance_date'])),
@@ -77,8 +88,8 @@ class Attendance_model extends MY_Model
                 'name'       => e(trim($r['first_name'] . ' ' . $r['last_name'])),
                 'department' => e((string) $r['department_name']),
                 'status'     => self::status_label($r['status']) . ($r['remarks'] ? ' <small class="text-muted">' . e($r['remarks']) . '</small>' : ''),
-                'in'         => e(substr((string) $r['check_in'], 0, 5)),
-                'out'        => e(substr((string) $r['check_out'], 0, 5)),
+                'in'         => $split ? $stack('check_in') : e(substr((string) $r['check_in'], 0, 5)),
+                'out'        => $split ? $stack('check_out') : e(substr((string) $r['check_out'], 0, 5)),
                 'hours'      => e(number_format((float) $r['working_hours'], 2)),
                 'late'       => (int) $r['late_minutes'] ? '<span class="text-red">' . (int) $r['late_minutes'] . '</span>' : '0',
                 'ot'         => e(number_format((float) $r['overtime_hours'], 2)),
@@ -110,7 +121,42 @@ class Attendance_model extends MY_Model
         $this->db->select('a.*, e.employee_code, e.first_name, e.last_name')->from('attendance a')->join('employees e', 'e.id = a.employee_id')->where('a.id', (int) $id);
         $this->scope_branch('a');
         $row = $this->db->get()->row_array();
+        if ($row) {
+            $periods = Attendance_periods::for_rows(array((int) $row['id']));
+            $row['periods'] = isset($periods[(int) $row['id']]) ? $periods[(int) $row['id']] : array();
+            $row['shift_periods'] = array();
+            if ($row['shift_id'] !== NULL) {                           // the periods of a split shift, for the labels of the edit form
+                $row['shift_periods'] = $this->db->query('SELECT g.segment_no, g.start_time, g.end_time FROM shift_segments g JOIN shifts s ON s.id = g.shift_id
+                    WHERE g.shift_id = ? AND s.is_split = 1 ORDER BY g.segment_no', array((int) $row['shift_id']))->result_array();
+            }
+        }
         return $row ? $row : NULL;
+    }
+
+    /**
+     * What the mark form needs to know about one employee and day: whether the employee works then, the shift and - for a split shift -
+     * its duty periods (so the form can ask for the in and out of each).
+     */
+    public function day_info()
+    {
+        $v = new Input_validator($this->input);
+        $employee = $v->ref('employee_id', 'employees');
+        $date = $v->date('attendance_date');
+        if ( ! $v->ok()) {
+            return array('ok' => FALSE, 'message' => $v->message());
+        }
+        $day = (new Shift_calculator())->day($employee, $date);
+        if ( ! $day || ! $day['employed']) {
+            return array('ok' => TRUE, 'employed' => FALSE, 'split' => FALSE, 'periods' => array(), 'shift' => '', 'day_type' => '');
+        }
+        $periods = array();
+        if (Shift_calculator::is_split($day['shift'])) {
+            foreach ($day['shift']['segments'] as $seg) {
+                $periods[] = array('no' => (int) $seg['segment_no'], 'start' => substr($seg['start_time'], 0, 5), 'end' => substr($seg['end_time'], 0, 5));
+            }
+        }
+        return array('ok' => TRUE, 'employed' => TRUE, 'split' => (bool) $periods, 'periods' => $periods,
+            'shift' => $day['shift'] ? $day['shift']['shift_name'] : '', 'day_type' => $day['day_type']);
     }
 
     // ------------------------------------------------------------------------------------------------ marking
@@ -138,6 +184,7 @@ class Attendance_model extends MY_Model
             if (is_string($row)) {
                 return $row;
             }
+            $segments = $this->take_segments($row);
             $row = array_merge($row, array('source' => 'manual', 'approval_status' => 'Approved', 'approved_by' => current_user_id(), 'approved_at' => now_local()));
             if ($existing) {
                 $this->db->where('id', (int) $existing['id'])->update('attendance', array_merge($row, array('updated_at' => now_local())));
@@ -146,6 +193,7 @@ class Attendance_model extends MY_Model
                 $this->db->insert('attendance', array_merge($row, array('employee_id' => $employee, 'attendance_date' => $date, 'created_by' => current_user_id(), 'created_at' => now_local())));
                 $new_id = (int) $this->db->insert_id();
             }
+            Attendance_periods::store($new_id, $segments);
             $this->audit('attendance', $new_id, 'mark', $existing ? array('status' => $existing['status'], 'source' => $existing['source']) : NULL, $this->audit_view($row, $employee, $date));
             return TRUE;
         });
@@ -176,9 +224,11 @@ class Attendance_model extends MY_Model
             if (is_string($row)) {
                 return $row;
             }
+            $segments = $this->take_segments($row);
             $this->db->insert('attendance', array_merge($row, array('employee_id' => $employee, 'attendance_date' => $date, 'source' => 'self',
                 'approval_status' => 'Pending', 'created_by' => current_user_id(), 'created_at' => now_local())));
             $new_id = (int) $this->db->insert_id();
+            Attendance_periods::store($new_id, $segments);
             $this->audit('attendance', $new_id, 'mark_self', NULL, $this->audit_view($row, $employee, $date));
             return TRUE;
         });
@@ -203,6 +253,7 @@ class Attendance_model extends MY_Model
             if (is_string($row)) {
                 return $row;
             }
+            Attendance_periods::store($id, $this->take_segments($row));
             $row['source'] = 'manual';
             $changes = array();
             foreach ($row as $k => $val) {
@@ -309,14 +360,18 @@ class Attendance_model extends MY_Model
                 if (is_string($row)) {
                     return $row;
                 }
+                $segments = $this->take_segments($row);
                 $row = array_merge($row, array('source' => 'manual', 'approval_status' => 'Approved', 'approved_by' => current_user_id(), 'approved_at' => now_local()));
                 if ($old) {
                     $this->db->where('id', (int) $old['id'])->update('attendance', array_merge($row, array('updated_at' => now_local())));
+                    $attendance_id = (int) $old['id'];
                     $counts['updated']++;
                 } else {
                     $this->db->insert('attendance', array_merge($row, array('employee_id' => $id, 'attendance_date' => $date, 'created_by' => current_user_id(), 'created_at' => now_local())));
+                    $attendance_id = (int) $this->db->insert_id();
                     $counts['created']++;
                 }
+                Attendance_periods::store($attendance_id, $segments);
             }
             $this->audit('attendance', NULL, 'bulk_mark', NULL, array_merge($counts, array('date' => $date, 'status' => $values['status'])));
             return TRUE;
@@ -437,9 +492,13 @@ class Attendance_model extends MY_Model
         $events = array();
         $have = array();
         $colors = array('Present' => '#00a65a', 'Absent' => '#dd4b39', 'Half-day' => '#f39c12', 'Leave' => '#00c0ef', 'Holiday' => '#3c8dbc', 'Weekly Off' => '#aaaaaa');
-        foreach ($this->db->query('SELECT * FROM attendance WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?', array((int) $employee_id, $from, $to))->result_array() as $r) {
+        $days = $this->db->query('SELECT * FROM attendance WHERE employee_id = ? AND attendance_date BETWEEN ? AND ?', array((int) $employee_id, $from, $to))->result_array();
+        $periods = Attendance_periods::for_rows(array_column($days, 'id'));
+        foreach ($days as $r) {
             $title = t('att_status_' . strtolower(str_replace(array(' ', '-'), '_', $r['status'])));
-            if ($r['check_in']) {
+            if (isset($periods[(int) $r['id']]) && count($periods[(int) $r['id']]) > 1) {
+                $title .= ' ' . Attendance_periods::text($periods[(int) $r['id']]);            // split shift: 10:02-14:00 / 18:05-22:00
+            } elseif ($r['check_in']) {
                 $title .= ' ' . substr($r['check_in'], 0, 5) . ($r['check_out'] ? '-' . substr($r['check_out'], 0, 5) : '');
             }
             if ((int) $r['late_minutes']) {
@@ -482,7 +541,28 @@ class Attendance_model extends MY_Model
             'check_in'  => $v->time('check_in', FALSE),
             'check_out' => $v->time('check_out', FALSE),
             'remarks'   => $v->text('remarks', 255, FALSE),
+            'periods'   => array(),
         );
+        // split shift: the in / out of each duty period (seg_in[] / seg_out[], a blank = nothing punched)
+        $seg_in = $v->time_list('seg_in', Shift_calculator::MAX_PERIODS, FALSE, TRUE);
+        $seg_out = $v->time_list('seg_out', Shift_calculator::MAX_PERIODS, FALSE, TRUE);
+        if ($seg_in || $seg_out) {
+            for ($i = 0; $i < max(count($seg_in), count($seg_out)); $i++) {
+                $in = isset($seg_in[$i]) ? $seg_in[$i] : NULL;
+                $out = isset($seg_out[$i]) ? $seg_out[$i] : NULL;
+                if ($in === NULL && $out !== NULL) {
+                    $v->fail('seg_out', sprintf(t('att_period_out_without_in'), $i + 1));
+                }
+                $values['periods'][] = array($in, $out);
+            }
+            $first = NULL;
+            foreach ($values['periods'] as $pair) {
+                $first = $first === NULL ? $pair[0] : $first;
+            }
+            if ($first !== NULL) {
+                $values['check_in'] = $first;
+            }
+        }
         if ($values['status'] !== NULL && in_array($values['status'], explode(',', self::WORKED), TRUE) && $values['check_in'] === NULL) {
             $v->fail('check_in', t('att_check_in_required'));
         }
@@ -506,16 +586,38 @@ class Attendance_model extends MY_Model
             'working_hours' => 0.0, 'break_minutes' => 0, 'late_minutes' => 0, 'early_leave_minutes' => 0, 'overtime_hours' => 0.0,
             'remarks' => $values['remarks'],
         );
+        $row['segments'] = array();
         if ($worked) {
-            $m = Shift_calculator::metrics($shift, $values['check_in'], $values['check_out'], array('off_day' => $day['day_type'] !== Shift_calculator::DAY_WORKING));
-            $row['check_in'] = $values['check_in'];
-            $row['check_out'] = $values['check_out'];
+            $options = array('off_day' => $day['day_type'] !== Shift_calculator::DAY_WORKING);
+            if (Shift_calculator::is_split($shift)) {
+                // a split shift: typed periods are measured one by one; a lone in / out is taken as present through every period between them
+                $m = ! empty($values['periods']) ? Shift_calculator::pair_metrics($shift, $values['periods'], $options) : Shift_calculator::span_metrics($shift, $values['check_in'], $values['check_out'], $options);
+                $row['check_in'] = $m['check_in'];
+                $row['check_out'] = $m['check_out'];
+                $row['break_minutes'] = $m['break_minutes'];
+                $row['segments'] = $m['periods'];
+                if ($m['incomplete'] > 0 && $row['remarks'] === NULL) {
+                    $row['remarks'] = Punch_ingestor::REMARK_INCOMPLETE;
+                }
+            } else {
+                $m = Shift_calculator::metrics($shift, $values['check_in'], $values['check_out'], $options);
+                $row['check_in'] = $values['check_in'];
+                $row['check_out'] = $values['check_out'];
+            }
             $row['working_hours'] = $m['working_hours'];
             $row['late_minutes'] = $m['late_minutes'];
             $row['early_leave_minutes'] = $m['early_leave_minutes'];
             $row['overtime_hours'] = $m['overtime_hours'];
         }
         return $row;
+    }
+
+    /** the duty-period rows of a computed day, taken out of the row so that the rest can be written to `attendance` */
+    protected function take_segments(array &$row)
+    {
+        $segments = isset($row['segments']) ? $row['segments'] : array();
+        unset($row['segments']);
+        return $segments;
     }
 
     /** the row locked for update (current branch, inside the user's scope), or an error */

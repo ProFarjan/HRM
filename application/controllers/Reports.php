@@ -167,7 +167,7 @@ class Reports extends MY_Controller
                 $times[] = substr($pt['punch_at'], 11, 5) . ((int) $pt['ignored'] ? '*' : '');
             }
             $rows[] = array(show_date($d), date('D', strtotime($d)), $x && $x['shift_name'] ? $x['shift_name'] . ' ' . substr($x['shift_start'], 0, 5) . '-' . substr($x['shift_end'], 0, 5) : '',
-                $x ? $x['status'] : $this->plan_status($day['plan']), $x ? substr((string) $x['check_in'], 0, 5) : '', $x ? substr((string) $x['check_out'], 0, 5) : '',
+                $x ? $x['status'] : $this->plan_status($day['plan']), $this->times_text($x, 'check_in'), $this->times_text($x, 'check_out'),
                 $x ? (int) $x['break_minutes'] : '', $x ? (float) $x['working_hours'] : '', $x ? (int) $x['late_minutes'] : '', $x ? (int) $x['early_leave_minutes'] : '',
                 $x ? (float) $x['overtime_hours'] : '', implode(' ', $times), $x ? (string) $x['remarks'] : '');
         }
@@ -282,10 +282,16 @@ class Reports extends MY_Controller
     {
         $this->require_permission('attendance_report');
         list($data, $stats, $p) = $this->period_data();
-        $rows = array(array(t('emp_code'), t('emp_name'), t('att_date'), t('rep_shift'), t('att_in'), t('att_remarks')));
+        $rows = array(array(t('emp_code'), t('emp_name'), t('att_date'), t('rep_shift'), t('att_in'), t('rep_reason')));
         foreach ($data['employees'] as $id => $e) {
-            foreach ($stats['employees'][$id]['missing_rows'] as $r) {
-                $rows[] = array($e['employee_code'], trim($e['first_name'] . ' ' . $e['last_name']), show_date($r['attendance_date']), (string) $r['shift_name'], substr((string) $r['check_in'], 0, 5), (string) $r['remarks']);
+            $seen = array();
+            foreach (array_merge($stats['employees'][$id]['missing_rows'], $stats['employees'][$id]['incomplete_rows']) as $r) {
+                if (isset($seen[$r['id']])) {
+                    continue;
+                }
+                $seen[$r['id']] = TRUE;
+                $rows[] = array($e['employee_code'], trim($e['first_name'] . ' ' . $e['last_name']), show_date($r['attendance_date']), (string) $r['shift_name'],
+                    $this->times_text($r, 'check_in'), Attendance_analytics::missing_reason($r));
             }
         }
         $this->send_period_xlsx('missing', $p, $rows);
@@ -411,9 +417,28 @@ class Reports extends MY_Controller
     protected function cell_text(array $r)
     {
         if (in_array($r['status'], array('Present', 'Half-day'), TRUE)) {
+            if ( ! empty($r['periods']) && count($r['periods']) > 1) {
+                return Attendance_periods::text($r['periods']);           // "10:02-14:00 / 18:05-22:00"
+            }
             return substr((string) $r['check_in'], 0, 5) . '-' . ($r['check_out'] !== NULL ? substr($r['check_out'], 0, 5) : '?');
         }
         return Attendance_reports_model::letter($r['status']);
+    }
+
+    /** the check-in or check-out of a row for Excel: one time, or - on a split-shift day - one per duty period ("10:02 / 18:05") */
+    protected function times_text($row, $field)
+    {
+        if ( ! $row) {
+            return '';
+        }
+        if ( ! empty($row['periods']) && count($row['periods']) > 1) {
+            $parts = array();
+            foreach ($row['periods'] as $p) {
+                $parts[] = $p[$field] === NULL ? '-' : substr($p[$field], 0, 5);
+            }
+            return implode(' / ', $parts);
+        }
+        return substr((string) $row[$field], 0, 5);
     }
 
     /** a day without an attendance row, from the shift plan */

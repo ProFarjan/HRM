@@ -49,6 +49,11 @@
             <file>tests/Attendance_analytics_test.php</file>
             <file>tests/Attendance_reports_test.php</file>
             <file>tests/Reports_flow_test.php</file>
+            <file>tests/Split_shift_test.php</file>
+            <file>tests/Split_shift_form_test.php</file>
+            <file>tests/Split_shift_attendance_test.php</file>
+            <file>tests/Split_shift_reports_test.php</file>
+            <file>tests/Split_shift_flow_test.php</file>
             <file>tests/Adms_parser_test.php</file>
             <file>tests/Branch_scope_test.php</file>
             <file>tests/Service_contract_test.php</file>

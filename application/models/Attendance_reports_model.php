@@ -105,14 +105,39 @@ class Attendance_reports_model extends MY_Model
         $days = Attendance_analytics::days($from, $to);
         $grid = array();
         if ($employees) {
-            foreach ($this->db->select('a.id, a.employee_id, a.attendance_date, a.status, a.check_in, a.check_out, a.working_hours, a.break_minutes, a.late_minutes, a.early_leave_minutes, a.overtime_hours, a.approval_status, a.remarks, a.locked, s.shift_name, s.start_time AS shift_start, s.end_time AS shift_end')
+            foreach ($this->db->select('a.id, a.employee_id, a.attendance_date, a.status, a.check_in, a.check_out, a.working_hours, a.break_minutes, a.late_minutes, a.early_leave_minutes, a.overtime_hours, a.approval_status, a.remarks, a.locked, s.shift_name, s.is_split AS shift_split, s.start_time AS shift_start, s.end_time AS shift_end')
                         ->from('attendance a')->join('shifts s', 's.id = a.shift_id', 'left')
                         ->where('a.attendance_date >=', $from)->where('a.attendance_date <=', $to)->where_in('a.employee_id', array_keys($employees))
                         ->get()->result_array() as $r) {
                 $grid[(int) $r['employee_id']][$r['attendance_date']] = $r;
             }
+            $grid = $this->attach_periods($grid);
         }
         return array('employees' => $employees, 'grid' => $grid, 'days' => $days, 'error' => NULL);
+    }
+
+    /**
+     * Give the rows of a split shift their duty periods (`periods`; [] for the others). One query, and none at all when no row of the period
+     * belongs to a split shift.
+     * @param array $grid employee_id => date => row
+     */
+    protected function attach_periods(array $grid)
+    {
+        $ids = array();
+        foreach ($grid as $by_date) {
+            foreach ($by_date as $r) {
+                if ((int) $r['shift_split'] === 1) {
+                    $ids[] = (int) $r['id'];
+                }
+            }
+        }
+        $periods = Attendance_periods::for_rows($ids);
+        foreach ($grid as $employee => $by_date) {
+            foreach ($by_date as $date => $r) {
+                $grid[$employee][$date]['periods'] = isset($periods[(int) $r['id']]) ? $periods[(int) $r['id']] : array();
+            }
+        }
+        return $grid;
     }
 
     /**
@@ -129,10 +154,12 @@ class Attendance_reports_model extends MY_Model
             return NULL;
         }
         $rows = array();
-        foreach ($this->db->select('a.*, s.shift_name, s.start_time AS shift_start, s.end_time AS shift_end')->from('attendance a')->join('shifts s', 's.id = a.shift_id', 'left')
+        foreach ($this->db->select('a.*, s.shift_name, s.is_split AS shift_split, s.start_time AS shift_start, s.end_time AS shift_end')->from('attendance a')->join('shifts s', 's.id = a.shift_id', 'left')
                     ->where('a.employee_id', (int) $employee_id)->where('a.attendance_date >=', $from)->where('a.attendance_date <=', $to)->get()->result_array() as $r) {
             $rows[$r['attendance_date']] = $r;
         }
+        $with_periods = $this->attach_periods(array((int) $employee_id => $rows));
+        $rows = $with_periods[(int) $employee_id];
         $plan = (new Shift_calculator())->plan(array((int) $employee_id), $from, $to);
         $plan = isset($plan[(int) $employee_id]) ? $plan[(int) $employee_id] : array();
 
@@ -195,6 +222,9 @@ class Attendance_reports_model extends MY_Model
         }
         if ($s['missing_out'] > 0) {
             $items[] = array('type' => 'warning', 'icon' => 'fa-sign-out', 'key' => 'ins_emp_missing', 'args' => array($s['missing_out']));
+        }
+        if ($s['incomplete'] > 0) {
+            $items[] = array('type' => 'warning', 'icon' => 'fa-columns', 'key' => 'ins_emp_incomplete', 'args' => array($s['incomplete']));
         }
         if ($s['no_record'] > 0) {
             $items[] = array('type' => 'danger', 'icon' => 'fa-database', 'key' => 'ins_no_record', 'args' => array($s['no_record']));

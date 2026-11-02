@@ -63,6 +63,14 @@ php index.php migrate                                                          #
 `cron` and `migrate` are command-line only: over HTTP they answer 404. Each job loops over the configured tenants
 (or only `TENANT_DB`). Jobs marked with a build step are added by that step.
 
+## Split shifts
+
+A person who works in parts (say 10:00-14:00 and 18:00-22:00) gets **one shift with several duty periods**: *Time > Shifts > Add*, tick **Split shift**
+and enter the periods. Hours are the sum of the periods, the break between them is never counted and never makes anyone late, early or overtime;
+each period has its own check-in, check-out, late and early-leave figures, taken from the device punches (shared out at the middle of the gap) or typed
+period by period on the Mark attendance page. Missing periods are flagged ("incomplete duty period") and listed in the Missing check-out report.
+Details in CLAUDE.md, "Split shifts".
+
 ## Attendance reports
 
 Under **Reports** in the sidebar (permission `attendance_report`; Excel needs `export_hr` too): daily attendance, monthly status grid, **monthly in/out
@@ -112,6 +120,8 @@ HRM_ADMIN_PASSWORD=... node tests/e2e/time_pages.js
 TENANT_DB=hrm_dev php tests/e2e/seed_attendance.php                                 # demo punches (re-run resets them)
 HRM_ADMIN_PASSWORD=... node tests/e2e/attendance_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/reports_pages.js                                  # attendance reports (after seed_attendance.php)
+TENANT_DB=hrm_dev php tests/e2e/seed_split.php                                      # split-shift demo people (after seed_attendance.php)
+HRM_ADMIN_PASSWORD=... node tests/e2e/split_shift_pages.js
 TENANT_DB=hrm_dev php tests/e2e/seed_devices.php                                    # demo devices, a pending serial number, a closed day
 HRM_ADMIN_PASSWORD=... node tests/e2e/devices_pages.js
 ```

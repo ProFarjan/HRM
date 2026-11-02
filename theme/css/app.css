@@ -24,6 +24,8 @@ table.dataTable thead th { white-space: nowrap; }
 .inout-grid .io-cell { line-height: 1.15; min-width: 38px; }
 .inout-grid .io-in, .inout-grid .io-out { font-size: 10px; display: inline-block; }
 .inout-grid .io-out { color: #666; }
+.inout-grid .io-split .io-period { display: block; font-size: 10px; line-height: 1.15; padding: 1px 0; }
+.inout-grid .io-split .io-period + .io-period { border-top: 1px dotted #bbb; }
 .inout-grid .io-missing { color: #f39c12; font-weight: bold; }
 .inout-grid thead th { position: sticky; top: 0; background: #fff; }
 .inout-grid tbody th:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }

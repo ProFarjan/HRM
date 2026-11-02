@@ -14,6 +14,7 @@ class Attendance extends MY_Controller
         'calendar_events' => 'attendance_view',
         'mark'            => 'attendance_add',
         'save_mark'       => 'attendance_add',
+        'day_info'        => 'attendance_add',
         'add_punch'       => 'attendance_add',
         'my_day'          => 'attendance_mark_self',
         'save_my_day'     => 'attendance_mark_self',
@@ -36,7 +37,7 @@ class Attendance extends MY_Controller
         'import_preview'  => 'attendance_import',
         'import_commit'   => 'attendance_import',
     );
-    protected $post_only = array('ajax_list', 'calendar_events', 'save_mark', 'add_punch', 'save_my_day', 'update', 'rebuild', 'delete',
+    protected $post_only = array('ajax_list', 'calendar_events', 'save_mark', 'day_info', 'add_punch', 'save_my_day', 'update', 'rebuild', 'delete',
         'approve', 'reject', 'save_bulk', 'punches_list', 'unmatched_list', 'link_pin', 'closed_list', 'import_preview', 'import_commit');
 
     public function __construct()
@@ -103,6 +104,13 @@ class Attendance extends MY_Controller
         $this->load->model('Employees_model');
         $this->data['page_title'] = t('att_mark');
         $this->render('attendance/form', array('row' => NULL, 'employees' => $this->Employees_model->active_list(), 'page_js' => array('attendance')));
+    }
+
+    /** the shift of the chosen employee and day (and its duty periods, for a split shift), for the form */
+    public function day_info()
+    {
+        $this->release_session_lock();
+        $this->json($this->Attendance_model->day_info());
     }
 
     public function save_mark()

@@ -146,9 +146,38 @@ abstract class Hrm_test_case extends TestCase
         return (int) $this->db->insert_id();
     }
 
+    /**
+     * A split shift (several duty periods in a day) of the current branch; $periods = list of array('H:i', 'H:i'). Returns the id.
+     * Start / end are the first start and the last end, working hours the sum of the periods, as Shifts_model stores them.
+     */
+    protected function insert_split_shift($code, array $periods = array(array('10:00', '14:00'), array('18:00', '22:00')), array $extra = array())
+    {
+        $minutes = 0;
+        foreach ($periods as $p) {
+            $minutes += (Shift_calculator::minutes($p[1]) - Shift_calculator::minutes($p[0]) + 1440) % 1440;
+        }
+        $last = $periods[count($periods) - 1];
+        $id = $this->insert_shift($code, $periods[0][0] . ':00', $last[1] . ':00', array_merge(array('is_split' => 1, 'working_hours' => round($minutes / 60, 2),
+            'is_night' => Shift_calculator::minutes($last[1]) <= Shift_calculator::minutes($periods[0][0]) ? 1 : 0), $extra));
+        foreach ($periods as $i => $p) {
+            $this->db->insert('shift_segments', array('shift_id' => $id, 'segment_no' => $i + 1, 'start_time' => $p[0] . ':00', 'end_time' => $p[1] . ':00'));
+        }
+        return $id;
+    }
+
     protected function assign_shift($employee_id, $shift_id, $from = '2020-01-01')
     {
         $this->db->insert('employee_shifts', array('employee_id' => $employee_id, 'shift_id' => $shift_id, 'effective_from' => $from, 'created_at' => date('Y-m-d H:i:s')));
+    }
+
+    /** the duty-period rows of an attendance row, segment_no => row */
+    protected function periods_of($attendance_id)
+    {
+        $out = array();
+        foreach ($this->db->order_by('segment_no')->get_where('attendance_segments', array('attendance_id' => $attendance_id))->result_array() as $r) {
+            $out[(int) $r['segment_no']] = $r;
+        }
+        return $out;
     }
 
     protected function attendance_row($employee_id, $date)

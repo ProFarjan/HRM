@@ -11,21 +11,24 @@ class Http_server
 
     public function start()
     {
-        $this->port = random_int(20000, 40000);
-        $env = array_merge($_SERVER, array('CI_ENV' => 'testing', 'TENANT_DB' => 'hrm_test'));
-        $env = array_filter($env, 'is_string');
-        $this->proc = proc_open(
-            array(PHP_BINARY, '-S', '127.0.0.1:' . $this->port, HRM_ROOT . '/tests/support/router.php'),
-            array(0 => array('pipe', 'r'), 1 => array('file', HRM_ROOT . '/tests/_output/server.log', 'a'), 2 => array('file', HRM_ROOT . '/tests/_output/server.log', 'a')),
-            $pipes, HRM_ROOT, $env
-        );
-        for ($i = 0; $i < 50; $i++) {
-            $fp = @fsockopen('127.0.0.1', $this->port, $errno, $errstr, 0.2);
-            if ($fp) {
-                fclose($fp);
-                return;
+        for ($attempt = 0; $attempt < 4; $attempt++) {            // a random port can be taken by someone else: try again with another
+            $this->port = random_int(20000, 40000);
+            $env = array_merge($_SERVER, array('CI_ENV' => 'testing', 'TENANT_DB' => 'hrm_test'));
+            $env = array_filter($env, 'is_string');
+            $this->proc = proc_open(
+                array(PHP_BINARY, '-S', '127.0.0.1:' . $this->port, HRM_ROOT . '/tests/support/router.php'),
+                array(0 => array('pipe', 'r'), 1 => array('file', HRM_ROOT . '/tests/_output/server.log', 'a'), 2 => array('file', HRM_ROOT . '/tests/_output/server.log', 'a')),
+                $pipes, HRM_ROOT, $env
+            );
+            for ($i = 0; $i < 50; $i++) {
+                $fp = @fsockopen('127.0.0.1', $this->port, $errno, $errstr, 0.2);
+                if ($fp) {
+                    fclose($fp);
+                    return;
+                }
+                usleep(100000);
             }
-            usleep(100000);
+            $this->stop();
         }
         throw new RuntimeException('test web server did not start');
     }

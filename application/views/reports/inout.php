@@ -30,9 +30,13 @@ $css = array('P' => 'att-p', 'A' => 'att-a', '½' => 'att-h2', 'L' => 'att-l', '
 						<tr>
 							<th style="white-space:nowrap"><a href="<?= site_url('reports/employee') . '?' . e(http_build_query(array('employee_id' => $id, 'mode' => 'month', 'month' => $month, 'year' => $year))) ?>"><?= e(trim($e['first_name'] . ' ' . $e['last_name'])) ?></a><br><small class="text-muted"><?= e($e['employee_code']) ?></small></th>
 							<?php foreach ($days as $d): $r = isset($grid[$id][$d]) ? $grid[$id][$d] : NULL; $l = $r ? Attendance_reports_model::letter($r['status']) : ''; $worked = $r && in_array($r['status'], array('Present', 'Half-day'), TRUE); ?>
-								<?php if ($worked): $late = (int) $r['late_minutes'] > 0; ?>
-									<td class="text-center io-cell<?= $late ? ' att-late' : '' ?><?= $r['status'] === 'Half-day' ? ' att-h2' : '' ?>" title="<?= e($r['status'] . ($late ? ' - ' . sprintf(t('rep_late_by'), (int) $r['late_minutes']) : '')) ?>">
+								<?php if ($worked): $late = (int) $r['late_minutes'] > 0; $split = ! empty($r['periods']) && count($r['periods']) > 1; ?>
+									<td class="text-center io-cell<?= $late ? ' att-late' : '' ?><?= $r['status'] === 'Half-day' ? ' att-h2' : '' ?><?= $split ? ' io-split' : '' ?>" title="<?= e($r['status'] . ($late ? ' - ' . sprintf(t('rep_late_by'), (int) $r['late_minutes']) : '')) ?>">
+									<?php if ($split): foreach ($r['periods'] as $period): ?>
+										<span class="io-period<?= $period['state'] !== 'complete' ? ' io-missing' : '' ?><?= (int) $period['late_minutes'] > 0 ? ' text-red' : '' ?>"><?= $period['check_in'] === NULL ? '-' : e(substr($period['check_in'], 0, 5)) . '<br>' . ($period['check_out'] === NULL ? '?' : e(substr($period['check_out'], 0, 5))) ?></span>
+									<?php endforeach; else: ?>
 										<span class="io-in<?= $late ? ' text-red' : '' ?>"><?= e(substr((string) $r['check_in'], 0, 5)) ?></span><br><span class="io-out<?= $r['check_out'] === NULL ? ' io-missing' : '' ?>"><?= $r['check_out'] !== NULL ? e(substr($r['check_out'], 0, 5)) : '?' ?></span>
+									<?php endif; ?>
 									</td>
 								<?php else: ?>
 									<td class="text-center <?= $l !== '' ? $css[$l] : '' ?>"><?= e($l) ?></td>

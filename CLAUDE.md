@@ -298,7 +298,9 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
 
 ### Time
 - `shifts` (id, branch_id, shift_name, shift_code, start_time, end_time, break_duration (min), working_hours DECIMAL(5,2) (0 = end -
-  start), grace_time (min), shift_allowance, is_night* (end < start), status).
+  start), grace_time (min), shift_allowance, is_night* (end < start), **is_split*** (several duty periods in a day), status).
+- `shift_segments`* (id, shift_id, segment_no, start_time, end_time; `UNIQUE (shift_id, segment_no)`) - the duty periods of a split shift
+  (see "Split shifts"); an ordinary shift has none.
 - `employee_shifts` (id, employee_id, shift_id, effective_from, effective_to NULL, is_active, created_by, created_at) - `UNIQUE (employee_id,
   effective_from)`; ranges of one employee never overlap.
 - `shift_rosters` (id, employee_id, shift_id NULL, roster_date, is_working_day, remarks) - `UNIQUE (employee_id, roster_date)`; wins over
@@ -319,6 +321,9 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
   break_minutes*, late_minutes, early_leave_minutes*, overtime_hours, source*, locked*, remarks, created_by, approved_by,
   approved_at, created_at, updated_at. `UNIQUE (employee_id, attendance_date)`; indexes `(branch_id, attendance_date, status)`,
   `(branch_id, approval_status)`.
+- `attendance_segments`* (id, attendance_id, segment_no, check_in, check_out, worked_minutes, late_minutes, early_leave_minutes;
+  `UNIQUE (attendance_id, segment_no)`, **`ON DELETE CASCADE`** - the day and its periods are rebuilt or removed as a whole) - what the
+  employee did in each duty period of a split-shift day; none for an ordinary day.
 
 ### Leave
 - `leave_types` (id, branch_id, leave_type_name, leave_code, default_days, is_paid* (unpaid = LWP in payroll), count_weekly_offs*
@@ -419,7 +424,7 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
   - only a check-in: late is known, working/overtime hours are 0 until the check-out.
   - the default shift applies only to employees of the shift's branch.
 - `Shift_calculator::metrics()` is pure (explicit options = no database). `plan($employees, $from, $to)` returns shift + day type for
-  every employee/day in 6 queries (employees, branches, rosters, assignments, holidays, shifts): shift = roster > assignment > default;
+  every employee/day in 6 queries (employees, branches, rosters, assignments, holidays, shifts; **a 7th for the duty periods only when a split shift is involved**): shift = roster > assignment > default;
   day type = active non-optional holiday > roster row > branch weekly offs > global weekly offs; plus `employed` (join/exit).
 
 ### Punch to day (`libraries/Punch_ingestor.php`, used by devices, import, manual punch) (fixes P4, P5)
@@ -431,7 +436,7 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
    employee (all its punches are then processed).
 4. Rebuild each touched employee/day from all non-ignored punches (`rebuild_day($employee_id, $date)`): earliest = check-in, latest =
    check-out (one punch = check-in only, status Present, no check-out yet), pairs OUT -> next IN give `break_minutes`, then the
-   shift metrics. Night shift (`is_night`): a punch before `shift.end_time + 4h` on the next calendar day belongs to the previous day.
+   shift metrics (a **split shift** is measured period by period: see "Split shifts"). Night shift (`is_night`): a punch before `shift.end_time + 4h` on the next calendar day belongs to the previous day.
 5. Device/service punches are `Approved`. A row HR edited by hand has `source = 'manual'` and is not overwritten by later punches
    unless HR clicks **Rebuild from punches**. Locked rows (month closed) are never changed; late punches for them go to the
    **Punches for closed days** list.
@@ -440,7 +445,8 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
 ### Manual and bulk marking
 - Permissions: `attendance_mark_self` (own day, row is `Pending`), `attendance_add` (any employee, `Approved`), `attendance_edit`,
   `attendance_approve`, `attendance_delete`, `show_all_attendance` (P14). `bulk_mark` = date + department, a row per employee, existing
-  rows skipped (or updated with *overwrite* ticked). Absent/Leave/Holiday/Weekly Off clear check_in/out.
+  rows skipped (or updated with *overwrite* ticked). Absent/Leave/Holiday/Weekly Off clear check_in/out. For a split shift the form asks for the
+  in and out of each duty period (see "Split shifts").
 
 ### Day close (cron `attendance_close`) (fixes P1)
 For every active employee (join_date <= day, no exit_date before it) and every **closed** day (never today) without an attendance row,
@@ -794,6 +800,38 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
 - **Permissions.** `devices_view` list + call log; `devices_manage` add / edit / delete / approve / allow address; `devices_keys` keys;
   `devices_commands` queue + enrol; `attendance_punches` unmatched + closed-day lists; `attendance_import` import. `Api` / `Iclock` map to `@device`.
 
+### Split shifts (after step 5; `Shift_calculator`, `Shifts_model`, `Punch_ingestor`, `Attendance_model`)
+For people who work in parts, e.g. **10:00-14:00, a break, then 18:00-22:00**. One shift with several **duty periods** - not two shifts and not a
+"break" setting - because the gap between the periods is not duty time at all.
+- **The shift** (Shifts > Add > *Split shift*): 2 to 4 periods (`Shift_calculator::MAX_PERIODS`), each at least a minute, in time order with a gap of at
+  least a minute between them, all within 24 hours of the first start (the last may run past midnight; a period that starts while the previous one
+  is still running is refused). `start_time` / `end_time` are the first start and the last end, **`working_hours` is the sum of the periods**,
+  `break_duration` is 0 and never deducted, `is_night` as before (end <= start), `grace_time` applies to every period.
+  `plan()` hands each shift row its `segments`; `Shift_calculator::is_split()` / `periods()` read them (minutes from the day's midnight, growing).
+- **From punches** (`split_metrics`, used by `Punch_ingestor::rebuild_day`): a punch belongs to the period on its side of the **middle of the gap**
+  (anything before 16:00 is period 1, after is period 2 for 14:00/18:00), no in/out state is needed; inside a period the first punch is the in and
+  the last the out (a lone punch is an in without an out); extra punches (a tea break inside a period) change nothing. Worked time = sum of the
+  periods, **the gap is never counted**. Per period: `late` = in after start + grace, `early leave` = out before the end; a period with no punches
+  is **missed**, one with only an in is **open** (no hours). Day level: `late` / `early leave` = sums (`early_leave_counts_as_late` as before),
+  `overtime` = worked - the sum of the periods (floored to `ot_min_minutes`), on a holiday / weekly off all worked time and no late,
+  `break_minutes` = the gap actually taken (informational, nothing is deducted), `check_in` = first in, **`check_out` = out of the last period
+  that has punches, NULL while that period is open** (so the existing Missing check-out list finds it), `remarks` = "incomplete duty period"
+  when any period is missed or open (day close does not overwrite a remark). Hours are exact minutes (seconds are dropped).
+- **By hand** (`pair_metrics`): the mark / edit form asks for the in and out **of each period** (it learns the shift from `attendance/day_info`);
+  what is typed in row 1 stays in period 1 even if it lies past the middle of the gap; an out without an in is refused, a blank period is missed.
+  With only **one in and one out** (bulk mark, My attendance today, a form that did not ask) `span_metrics` takes the person as present through every
+  period between the two: worked = the overlap with each period, late against the first start, early leave against the last end, overtime = time
+  before the first start and after the last end. Manual rows keep their periods until HR rebuilds the day from punches.
+- **Stored**: `attendance.check_in/check_out/working_hours/late/early/overtime/break_minutes` as above plus `attendance_segments`; rebuilding a day
+  with an ordinary shift removes them. Deleting the day deletes them (cascade).
+- **Shown**: the attendance list and the employee report stack one time per period; the calendar title is "10:02-14:00 / 18:05-22:00"; the in/out
+  sheet draws a block per period (red = late, ? = no check-out); Excel uses "10:02-14:00 / 18:05-22:00" (a missing time is `?`, an empty period `-`).
+  **Reports**: `period()` reads the periods with **one extra query, and only when a split shift is in the period** (2 -> 3); the analytics count an
+  **incomplete duty period** (a period with no punches or no check-out on a day before today) - a finding, and a row in the Missing check-out report
+  with the reason ("Duty period 2: no punches" / "No check-out"). Payroll later reads `working_hours` / `late_minutes` / `overtime_hours` of the day
+  and needs nothing else from the periods.
+- Changing a shift's periods does not recalculate days already recorded (same as changing any shift); HR rebuilds a day from its punches to apply it.
+
 ### Attendance reports (after step 5; controller `Reports`, library `Attendance_analytics`)
 - **Pages** (all need `attendance_report`; sidebar group *Reports*; Excel needs `export_hr` as well, is audited as module `reports` / action `export`,
   and a range that is too long answers HTTP 422 instead of running): `daily`, `monthly` (status grid), `inout` (all employees x the days of a month, each
@@ -1007,6 +1045,12 @@ regenerating or editing a past month uses the current structure.
   rate limit, ADMS command round trip), `Device_health_test` (colours, drift, lost-punch rule, cron output), `Devices_flow_test` (HTTP: permissions,
   CRUD, keys shown once, approve pending, commands, enrol, exit queues delete_user, call log, branch scope), `Punch_review_test` (unmatched list,
   link PIN, closed-day list), `Punch_import_test` (preview writes nothing, import idempotent, CSV, tokens).
+- **Split shift tests:** `Split_shift_test` (the measurement: full day, late back from the break, sharing punches at the middle of the gap, tea
+  break inside a period, missed / open periods, overtime and its blocks, day off, across midnight, typed times, one in / out, plan query count),
+  `Split_shift_form_test` (validation, derived times, update of the periods alone, back to an ordinary shift, delete), `Split_shift_attendance_test`
+  (rebuild from punches, incomplete day completing, manual marking / editing / bulk / own day, `day_info`, list, calendar, day close),
+  `Split_shift_reports_test` (one extra query only for split days, incomplete periods and their reasons), `Split_shift_flow_test` (HTTP: shift
+  form, mark form, a service batch, the reports and their Excel), `Input_validator_test::test_time_list_...`.
 - **Attendance report tests:** `Attendance_analytics_test` (every definition above, streaks, insights, helpers), `Attendance_reports_test` (employee
   report days / punches / night shift / scope, period rows), `Report_query_budget_test` (period report 500 x 30 days <= 3 queries, the analytics 0 queries,
   employee report <= 12 queries even for a year), `Reports_flow_test` (HTTP: 403 per report and per Excel, content, validation, audited exports, own / department scope).
