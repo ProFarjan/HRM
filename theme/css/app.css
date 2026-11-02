@@ -11,3 +11,18 @@ table.dataTable thead th { white-space: nowrap; }
 .roster-grid td.roster-changed { outline: 2px solid #f39c12; }
 .roster-grid td.roster-not-employed { opacity: .45; }
 .roster-applies { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* monthly attendance grid */
+.monthly-grid td, .monthly-grid th { padding: 2px 4px !important; font-size: 12px; }
+.monthly-grid .att-p { color: #00a65a; font-weight: bold; }
+.monthly-grid .att-a { background: #f9d6d2; color: #a94442; font-weight: bold; }
+.monthly-grid .att-h2 { background: #fcefd5; }
+.monthly-grid .att-l { background: #d9f2fb; }
+.monthly-grid .att-hol { background: #fdf2e0; color: #8a6d3b; }
+.monthly-grid .att-w { background: #f0f0f0; color: #999; }
+.monthly-grid .att-late { box-shadow: inset 0 -3px 0 #dd4b39; }
+@media print {
+	.main-header, .main-sidebar, .main-footer, .no-print, .content-header small { display: none !important; }
+	.content-wrapper { margin-left: 0 !important; min-height: 0 !important; }
+	.box { border: 0; box-shadow: none; }
+	a[href]:after { content: ""; }
+}

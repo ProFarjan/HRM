@@ -13,8 +13,9 @@
             <file>tests/Guardrail_static_checks_test.php</file>
             <file>tests/Guardrail_permission_coverage_test.php</file>
             <file>tests/Input_validator_test.php</file>
+            <file>tests/Report_query_budget_test.php</file>
         </testsuite>
-        <testsuite name="foundation-administration-organisation-time">
+        <testsuite name="modules">
             <file>tests/Tx_test.php</file>
             <file>tests/Idempotency_test.php</file>
             <file>tests/Sequences_test.php</file>
@@ -39,6 +40,12 @@
             <file>tests/Rosters_test.php</file>
             <file>tests/Holidays_test.php</file>
             <file>tests/Time_flow_test.php</file>
+            <file>tests/Punch_ingestion_test.php</file>
+            <file>tests/Punch_ingestion_atomicity_test.php</file>
+            <file>tests/Day_close_test.php</file>
+            <file>tests/Attendance_test.php</file>
+            <file>tests/Attendance_permission_test.php</file>
+            <file>tests/Attendance_flow_test.php</file>
             <file>tests/Migration_roundtrip_test.php</file>
         </testsuite>
     </testsuites>
