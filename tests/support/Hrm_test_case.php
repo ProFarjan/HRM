@@ -53,6 +53,15 @@ abstract class Hrm_test_case extends TestCase
         return (int) $this->db->insert_id();
     }
 
+    /** a device row of the branch (attendance_punches.device_id is a foreign key); returns its id */
+    protected function insert_device($name = 'Gate', array $extra = array(), $branch_id = NULL)
+    {
+        $this->db->insert('devices', array_merge(array(
+            'branch_id' => $branch_id !== NULL ? $branch_id : $this->first_branch_id(), 'name' => $name, 'comm_mode' => 'windows_service', 'status' => 'active', 'created_at' => date('Y-m-d H:i:s'),
+        ), $extra));
+        return (int) $this->db->insert_id();
+    }
+
     /** a role holding exactly $permissions (is_system = 0 unless $system) */
     protected function insert_role($name, array $permissions = array(), $system = FALSE)
     {
