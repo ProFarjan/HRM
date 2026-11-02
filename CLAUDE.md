@@ -30,6 +30,7 @@ There is no build step. Verify PHP with `php -l` and by exercising the real page
 php -l application/models/Payroll_model.php              # syntax check
 php index.php migrate                                     # DB to $config['migration_version'] (every configured tenant)
 php index.php migrate version 12                          # to a specific version (down() must work)
+php index.php migrate status                              # current / expected schema version of every tenant
 TENANT_DB=hrm_client_xyz php index.php migrate            # one tenant only
 php index.php cron attendance_close [Y-m-d] [dry-run]     # day close for a day (default yesterday) - run 00:30
 php index.php cron leave_carry_forward [year]             # year-end carry forward - run 1 Jan 00:10
@@ -55,7 +56,8 @@ application/
   controllers/   one per module (list below); Api.php (device JSON), Iclock.php (ADMS), Cron.php (CLI only), Auth.php (login)
   models/        <Module>_model.php - all SQL lives here
   helpers/       hrm_helper.php (settings, dates, money, month ranges), permission_helper.php, sequence_helper.php
-  libraries/     Input_validator.php, Tx.php, Idempotency.php, Tenant.php (per-tenant switch + migrate), Hrm_migration.php,
+  libraries/     Input_validator.php, Datatable_request.php (server-side list parameters), Tx.php, Idempotency.php,
+                 Tenant.php (per-tenant switch, migrate, version), Hrm_migration.php,
                  Payroll_calculator.php, Shift_calculator.php, Punch_ingestor.php, Adms_protocol.php, Device_command_queue.php, Pdf.php
   migrations/    NNN_name.php, sequential
   views/         <module>/<page>.php, layout/ (head, sidebar, header, footer, scripts), partials/ (modals)
@@ -69,8 +71,10 @@ tests/           phpunit bootstrap booting CI3 against hrm_test; static_checks.p
 - One database per client (same model as pos-retails): `config/database.php` maps `HTTP_HOST` to a database
   (`get_database_domain_map()`), CLI selects it with `TENANT_DB=...`, `get_all_configured_database_names()` is what `Migrate`
   and `Cron` loop over. **Never hard-code a tenant or branch id anywhere** (P3).
-- Inside a database every business row carries `branch_id`. `current_branch_id()` comes from the session (web) or from the
-  device key / device row (device endpoints). List and report queries filter on it through `MY_Model::scope_branch($alias)`.
+- Inside a database every business row carries `branch_id`. `current_branch_id()` comes from the login's branch (web) or from the
+  device key / device row (device endpoints). Only the system Admin role may work in another branch: the header switcher posts to
+  `branches/switch_branch` (`@system`), which stores `branch_id` in the session; `load_global()` re-checks that the branch is active
+  on every request (otherwise back to the home branch). List and report queries filter on it through `MY_Model::scope_branch($alias)`.
 - "Own records only" is a permission per module (`show_all_<module>`), applied with `MY_Model::scope_own($alias)`.
   A department head additionally sees their department (`scope_department`). Employees with a login use the self-service area
   (`Ess_Controller`), which can only ever read/write rows of `current_employee_id()`.
@@ -98,9 +102,12 @@ tests/           phpunit bootstrap booting CI3 against hrm_test; static_checks.p
   widgets do not queue behind the session lock.
 
 ### Settings
-- Single row `hr_settings` (id = 1) edited at `/settings` (tabs: General, Attendance, Payroll, Leave, Devices, Notifications).
+- Single row `hr_settings` (id = 1) edited at `/settings` (tabs: General, Attendance, Payroll, Leave, Devices, Notifications; permission
+  `settings_edit`). Each key has its own validation rule; a save writes and audits only the keys that changed, then resets the cache.
+  The logo is uploaded through `Input_validator::image()`, stored as `uploads/settings/<random>.png|jpg` and served by `Settings::logo`.
+  `default_shift_id` gets its control when shifts exist (step 3).
   Read through `hr_setting('key', $default)` (static cache, falls back to `config/hrm.php`), so a new setting never breaks an
-  un-migrated tenant. Branch settings (timezone, weekly offs, payslip address) live on `branches`.
+  un-migrated tenant. Branch settings (timezone, weekly offs, payslip address = `branches.address`) live on `branches`.
 
 ### Migrations
 - `application/migrations/NNN_name.php`, sequential; bump `$config['migration_version']`. `php index.php migrate` is routed to
@@ -125,7 +132,8 @@ CodeIgniter 3 routes **every public method** of the controller class chain (it b
 ```php
 abstract class MY_Controller extends CI_Controller
 {
-    /** method => permission key | '@any' (any logged-in user) | '@self' (Ess_Controller only; the model scopes to the employee) */
+    /** method => permission key | '@any' (any logged-in user) | '@system' (system Admin role only)
+     *  | '@self' (Ess_Controller only; the model scopes to the employee) */
     protected $permission_map = array();
     /** methods that change data: POST only */
     protected $post_only = array();
@@ -143,7 +151,8 @@ abstract class MY_Controller extends CI_Controller
             $this->deny(405);
         }
         $key = $map[$method];
-        if ($key !== '@any' && $key !== '@self' && !has_permission($key)) {
+        if ($key === '@system' && !current_user()['is_system']) { $this->deny(403); }   // not the same as holding every key
+        if ($key !== '@any' && $key !== '@self' && $key !== '@system' && !has_permission($key)) {
             $this->deny(403, $this->input->is_ajax_request() ? 'text' : 'page');   // AJAX gets a plain text message
         }
         return call_user_func_array(array($this, $method), $params);
@@ -181,7 +190,9 @@ $reason      = $v->text('reason', 255, false);               // trimmed, length 
 if (!$v->ok()) { return $v->message(); }                       // all errors at once, one per line
 ```
 Other getters: `flag` (checkbox -> 0/1), `secret` (password: not trimmed or filtered, length only), `token` (the `request_token` uuid),
-`int_list` (id arrays). `text()` refuses anything that looks like an HTML tag and control characters; everything else (quotes, `&`, SQL-looking
+`int_list` (id arrays), `enum_list` (checkbox groups of strings, e.g. permission keys), `email`, `image` (upload: type from the file
+contents via `getimagesize`, size cap, `is_uploaded_file`). DataTables parameters are read only by `Datatable_request` (sort column by
+index from a whitelist, page size clamped to the screen cap, search text <= 100 characters); list cells are escaped with `e()` in the model. `text()` refuses anything that looks like an HTML tag and control characters; everything else (quotes, `&`, SQL-looking
 strings, Bangla) is accepted and stored verbatim.
 Rules: no `extract()`; no `$_POST` access in models; no request value inside an SQL string (Query Builder, or `?` bindings with an
 array); enums, statuses and sort columns are whitelisted; DataTables `order[0][column]` is mapped through a whitelist array;
@@ -233,7 +244,8 @@ and reads `SELECT LAST_INSERT_ID()` inside the caller's transaction (concurrent 
 - Salary figures need `employees_salary`; `bank_account_number`, `national_id`, `tin` are masked (last 4 digits) in lists and
   exports unless the user has `employees_sensitive`. Every export needs `export_hr` and is written to `audit_log`.
 - Payslip PDFs and employee documents are served through a controller that checks ownership or permission; emailed links are
-  signed (HMAC + expiry). Uploads: extension + MIME whitelist, random file names, size cap.
+  signed (HMAC + expiry). Uploads: type from the file contents (`Input_validator::image`), random file names, size cap (PHP's own size errors give the same
+  message), never served from `uploads/` directly.
 
 ### G7. Audit (fixes P8)
 `MY_Model::audit($module, $record_id, $action, $old, $new)` writes `audit_log` for approve, reject, pay, delete, close/reopen,
@@ -614,6 +626,23 @@ Routes: `iclock/cdata`, `iclock/getrequest`, `iclock/devicecmd` -> `Iclock` cont
 `reports_hr`, `dashboard_hr`, `export_hr`, `settings_edit`, `users_view/add/edit/delete`, `roles_manage`, `audit_view`.
 Self-service needs only a login linked to an employee (`@self` endpoints in `Ess`).
 
+### Users, roles and branches (build step 1)
+- **Branches** have no `branches_*` keys: the pages use `settings_edit` (branches are company settings). Branches are deactivated, never
+  deleted; you cannot deactivate the branch you work in, your login's branch, or the last active branch.
+- **No escalation through administration.** Someone who is not the system Admin may only assign, edit or delete roles whose permission
+  set is a subset of their own, only grant keys they hold themselves, and only manage logins whose role is within their own permissions.
+  Only the Admin assigns the Admin role or manages an Admin login. The Admin role itself is never edited or deleted.
+- **Never yourself:** nobody changes their own role, branch or status or deletes their own login (`Users_test`).
+- **Last Admin:** the last active Admin login cannot be deactivated, demoted or deleted; the check locks the other Admin rows
+  (`SELECT ... FOR UPDATE`), so two Admins cannot remove each other concurrently.
+- Users are listed per branch; non-Admins always create logins in their own branch. A role in use cannot be deleted; a login with records
+  (foreign keys from later modules) cannot be deleted - deactivate it. Every create / change / role change / password reset /
+  (de)activation / delete is audited, never with a password.
+- After login, `Dashboard::home` (`@any`, also the site root) sends a user to the dashboard (`dashboard_hr`), else to the first menu entry
+  they may open, else to a welcome page.
+- **Audit viewer** (`audit_view`): rows of the working branch (rows without a branch only for the Admin), date range default 7 days and
+  at most 366, whitelisted sort, three queries per page (`Audit_test`).
+
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
   history, documents, device PIN + **Enrol on device** -> queues `create_user`), profile (attendance, leave balance, advances, loans,
@@ -775,7 +804,7 @@ regenerating or editing a past month uses the current structure.
 ## Build order (each step shippable, with migrations and tests)
 0. **Guardrails first** *(done)*: CI3 skeleton, `MY_Controller` (default-deny `_remap`), `Input_validator`, `Tx`, `Idempotency`, `sequences`,
    `MY_Model` scope/audit, `tests/static_checks.php`, the guardrail tests (P6, P7, P11, P12, P13, P15, P18), phpunit bootstrap on `hrm_test`.
-1. Auth (login, `password_hash`, throttle, idle logout), roles/permissions, branches, settings, layout, audit log, migration runner per tenant.
+1. Auth (login, `password_hash`, throttle, idle logout), roles/permissions, branches, settings, layout, audit log, migration runner per tenant. *(done)*
 2. Organisation: departments, designations, employees (documents, salary structure history, PIN + PIN history), users linked to employees.
 3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests.
 4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14).
@@ -792,6 +821,8 @@ regenerating or editing a past month uses the current structure.
   seeds fixtures per test, and wraps each test in a transaction.
 - **Guardrail tests** (run first; a failure blocks everything else): `Guardrail_static_checks_test`, `Guardrail_permission_coverage_test`
   (also the 403 smoke test with a no-permission user), `Input_validator_test`, `Report_query_budget_test`.
+- **Administration tests (step 1):** `Users_test`, `Roles_test`, `Branches_test`, `Settings_test`, `Audit_test`, `Datatable_request_test`,
+  `Admin_flow_test` (HTTP: landing page, branch switch, logo upload, CSRF on lists, by-id 403).
 - **Behaviour tests:** `Shift_calculator_test` (normal, grace, night shift, holiday work); `Punch_ingestion_test`; `Day_close_test`;
   `Leave_workflow_test`; `Overtime_source_test`; `Payroll_calculator_test` (every formula line, auto vs manual, late conversion, joiner/leaver,
   mid-month raise, advance + loan); `Payroll_missing_rows_test`; `Payroll_tamper_test`; `Payroll_payment_atomicity_test`;
