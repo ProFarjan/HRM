@@ -10,8 +10,9 @@ server-side DataTables, MySQL 5.7+ / MariaDB 10.3+ (InnoDB, utf8mb4). One databa
 **[CLAUDE.md](CLAUDE.md) is the specification** (architecture, guardrails G1-G8, domain model, business rules, device
 integration, permissions, the defect register P1-P20 and the build order). Read it before changing anything.
 
-Status: build steps 0-2 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
-designations, employees with salary history, documents, device PIN history). Business modules arrive
+Status: build steps 0-3 (guardrails, application shell, login, users, roles, branches, settings, audit log; departments,
+designations, employees with salary history, documents, device PIN history; shifts, shift assignments, roster, holidays,
+`Shift_calculator`). Business modules arrive
 step by step, see "Build order" in CLAUDE.md.
 
 ## Requirements
@@ -42,7 +43,8 @@ php index.php migrate                                                          #
    `HRM_ADMIN_USER` overrides the username. Nothing secret is committed.
    One tenant only: `TENANT_DB=hrm_client_xyz php index.php migrate`. A specific version: `php index.php migrate version 6`.
    Where every tenant stands: `php index.php migrate status`.
-3. Open the site and log in. Under **Organisation**: employees, departments, designations. Under **Administration**: users, roles (permission grid), branches, settings (six tabs) and the audit log.
+3. Open the site and log in. Under **Organisation**: employees, departments, designations. Under **Time**: shifts, shift
+   assignments, roster (grid, copy week, xlsx/csv import), holidays. Under **Administration**: users, roles (permission grid), branches, settings (six tabs) and the audit log.
    Set `HRM_ENCRYPTION_KEY` (environment) for signed links in later steps.
 4. Make sure `application/logs`, `application/cache` and `uploads` are writable by the web server. `uploads/` is denied by
    `.htaccess`; files are served only through a controller.
@@ -77,6 +79,7 @@ TENANT_DB=hrm_dev php -S 127.0.0.1:8099 tests/support/router.php &
 HRM_ADMIN_PASSWORD=... node tests/e2e/shell_smoke.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/admin_pages.js
 HRM_ADMIN_PASSWORD=... node tests/e2e/organisation_pages.js
+HRM_ADMIN_PASSWORD=... node tests/e2e/time_pages.js
 ```
 
 The test bootstrap boots CodeIgniter against **`hrm_test`** (it refuses any database whose name does not end in `_test`),
@@ -89,9 +92,10 @@ user without permissions is 403), `Input_validator_test`. The HTTP tests start `
 ```
 application/config      config, database(.example), hrm (setting defaults), permissions (catalog), menu (sidebar)
 application/core        MY_Controller (default-deny _remap), Ess_Controller, Api_Controller, MY_Model, Default_deny, hrm_autoload
-application/controllers Auth, Cron, Dashboard, Users, Roles, Branches, Settings, Audit, Employees, Departments, Designations
+application/controllers Auth, Cron, Dashboard, Users, Roles, Branches, Settings, Audit, Employees, Departments, Designations,
+                        Shifts, Employee_shifts, Rosters, Holidays
 application/models      all SQL lives here
-application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration
+application/libraries   Input_validator, Datatable_request, Tx, Idempotency, Tenant, Hrm_migration, Shift_calculator
 application/helpers     hrm (settings, dates, money), permission, sequence
 application/migrations  NNN_name.php, sequential, idempotent, working down()
 theme/                  AdminLTE 2 and plugins as plain files, theme/js/app.js (CSRF, iCheck, idle logout)

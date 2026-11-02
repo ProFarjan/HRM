@@ -191,7 +191,8 @@ if (!$v->ok()) { return $v->message(); }                       // all errors at 
 ```
 Other getters: `flag` (checkbox -> 0/1), `secret` (password: not trimmed or filtered, length only), `token` (the `request_token` uuid),
 `int_list` (id arrays), `enum_list` (checkbox groups of strings, e.g. permission keys), `email`, `image` (upload: type from the file
-contents via `getimagesize`, size cap, `is_uploaded_file`), `document` (PDF by its `%PDF-` signature, or PNG/JPEG; original name cleaned). DataTables parameters are read only by `Datatable_request` (sort column by
+contents via `getimagesize`, size cap, `is_uploaded_file`), `document` (PDF by its `%PDF-` signature, or PNG/JPEG; original name cleaned),
+`spreadsheet` (import: `.xlsx` by its ZIP signature or UTF-8 `.csv`; returns the PhpSpreadsheet reader type). DataTables parameters are read only by `Datatable_request` (sort column by
 index from a whitelist, page size clamped to the screen cap, search text <= 100 characters); list cells are escaped with `e()` in the model. `text()` refuses anything that looks like an HTML tag and control characters; everything else (quotes, `&`, SQL-looking
 strings, Bangla) is accepted and stored verbatim.
 Rules: no `extract()`; no `$_POST` access in models; no request value inside an SQL string (Query Builder, or `?` bindings with an
@@ -298,10 +299,12 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
 ### Time
 - `shifts` (id, branch_id, shift_name, shift_code, start_time, end_time, break_duration (min), working_hours DECIMAL(5,2) (0 = end -
   start), grace_time (min), shift_allowance, is_night* (end < start), status).
-- `employee_shifts` (id, employee_id, shift_id, effective_from, effective_to NULL, is_active, created_by).
-- `shift_rosters` (id, employee_id, shift_id, roster_date, is_working_day, remarks) - `UNIQUE (employee_id, roster_date)`; wins over
-  `employee_shifts` for that day; `is_working_day = 0` makes the day a weekly off for that employee.
-- `holidays` (id, branch_id, holiday_name, holiday_date, year, is_optional, description, status) - `UNIQUE (branch_id, holiday_date)`.
+- `employee_shifts` (id, employee_id, shift_id, effective_from, effective_to NULL, is_active, created_by, created_at) - `UNIQUE (employee_id,
+  effective_from)`; ranges of one employee never overlap.
+- `shift_rosters` (id, employee_id, shift_id NULL, roster_date, is_working_day, remarks) - `UNIQUE (employee_id, roster_date)`; wins over
+  `employee_shifts` for that day; `is_working_day = 0` makes the day a weekly off for that employee (shift_id may then be NULL).
+- `holidays` (id, branch_id, holiday_name, holiday_date, year, is_optional, is_fixed_date*, description, status) - `UNIQUE (branch_id,
+  holiday_date)`. `is_fixed_date` = same day every year (copied by "copy last year"); `is_optional` holidays are not days off.
 - Weekly offs: `hr_settings.weekly_offs` (default `5` = Friday for Bangladesh; pos-retails default was `7`), overridden by
   `branches.weekly_offs`, overridden per day by a roster row.
 
@@ -403,6 +406,17 @@ All tables InnoDB + utf8mb4, foreign keys declared (`ON DELETE RESTRICT` unless 
   - `overtime_hours` = max(0, working_hours - expected), 2 decimals, then floored to `ot_min_minutes` blocks.
 - Without a shift: working_hours = out - in; late = 0; overtime = 0.
 - Worked on a holiday or weekly off (Present/Half-day): the **whole** working_hours is overtime and late = 0.
+- Interpretations fixed in step 3 (`Shift_calculator_test` holds each of them):
+  - times across midnight: late and early leave use the short distance (normalised to +-12 h), so a 00:30 check-in on a 22:00 shift is
+    150 min late (minus grace), not 21 h early; worked time adds 1440 when out < in.
+  - `early_leave_counts_as_late` = 1 adds the early-leave minutes to `late_minutes` (both are still returned separately).
+  - overtime is computed in minutes (worked - expected) and then floored to `ot_min_minutes` blocks; off-day overtime (all hours) is
+    not floored, and it applies with or without a shift.
+  - only a check-in: late is known, working/overtime hours are 0 until the check-out.
+  - the default shift applies only to employees of the shift's branch.
+- `Shift_calculator::metrics()` is pure (explicit options = no database). `plan($employees, $from, $to)` returns shift + day type for
+  every employee/day in 6 queries (employees, branches, rosters, assignments, holidays, shifts): shift = roster > assignment > default;
+  day type = active non-optional holiday > roster row > branch weekly offs > global weekly offs; plus `employed` (join/exit).
 
 ### Punch to day (`libraries/Punch_ingestor.php`, used by devices, import, manual punch) (fixes P4, P5)
 1. `INSERT IGNORE` into `attendance_punches` (unique key) - a re-sent punch is a no-op.
@@ -670,6 +684,22 @@ Self-service needs only a login linked to an employee (`@self` endpoints in `Ess
 - Not in step 2 (later steps): **Enrol on device** / `delete_user` command queue (step 5); the profile's attendance, leave balance,
   advances, loans and payroll sections (steps 4-9).
 
+### Time (build step 3)
+- Shifts (`shifts_*`): code unique per branch, `is_night` derived from end < start, break shorter than the shift, working hours not
+  longer than it; delete only when no assignment, roster row or default setting uses the shift (deactivate otherwise).
+- **Permissions without their own keys:** shift assignments are seen with `shifts_view`; assigning people (single, bulk by department,
+  removing the latest) is scheduling and needs `rosters_manage` (the catalog has no `employee_shifts_*` keys).
+- Assignments: a new one must start on/after the join date and after the latest one, and closes it (`effective_to` = day before); only the
+  latest can be removed (the previous reopens). Bulk assignment runs in one transaction and skips employees already on that shift or with
+  a later assignment. Only active shifts of the branch and current employees.
+- Roster (`rosters_manage`): week/month grid per department; a cell is a shift, `OFF` or empty (= no row: normal rules). Save posts only
+  changed cells (max 5000, at most one year). Copy week copies 7 days of rows (keep or overwrite). Import `.xlsx`/`.csv` with columns
+  employee_code, date (UI format, Y-m-d or an Excel date), shift_code | OFF | empty (clear); every row is checked first and with any error
+  nothing is written.
+- Holidays (`holidays_*`): one per branch and date; year view; copy last year's `is_fixed_date` holidays (29 Feb skipped in a common year,
+  taken dates skipped).
+- Settings: `default_shift_id` on the Attendance tab (any active shift; it only applies in its own branch).
+
 ## Modules, pages and endpoints (controllers; each declares its `$permission_map`)
 - `Employees` - list (filters branch, department, designation, status, type), add/edit (tabs: personal, job, bank, salary structure
   history, documents, device PIN + **Enrol on device** -> queues `create_user`), profile (attendance, leave balance, advances, loans,
@@ -833,7 +863,7 @@ regenerating or editing a past month uses the current structure.
    `MY_Model` scope/audit, `tests/static_checks.php`, the guardrail tests (P6, P7, P11, P12, P13, P15, P18), phpunit bootstrap on `hrm_test`.
 1. Auth (login, `password_hash`, throttle, idle logout), roles/permissions, branches, settings, layout, audit log, migration runner per tenant. *(done)*
 2. Organisation: departments, designations, employees (documents, salary structure history, PIN + PIN history), users linked to employees. *(done)*
-3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests.
+3. Time: shifts, employee shifts, rosters, holidays, weekly offs, `Shift_calculator` + unit tests. *(done)*
 4. Attendance: punches table, `Punch_ingestor`, manual/bulk mark, approval, rebuild day, **day close cron**, calendar, daily/monthly reports (P1, P4, P5, P14).
 5. Devices: `Api::pull_from_machine` (Windows Service contract) and `Iclock` (ADMS), device keys, devices page, pending SNs, unmatched punches,
    command queue, health + lost-punch detection, USB/CSV import (P3, P16, P17).
@@ -845,11 +875,15 @@ regenerating or editing a past month uses the current structure.
 
 ## Testing
 - `tests/` boots CI3 against `hrm_test` (migrated from zero in the bootstrap; also run `migrate version <n-1>` then back to prove `down()`),
-  seeds fixtures per test, and wraps each test in a transaction.
+  seeds fixtures per test, and wraps each test in a transaction. The bootstrap removes CodeIgniter's error/exception handlers after
+  booting: PHPUnit 9 does not replace an existing handler, so otherwise a warning in application code would be printed, not fail
+  the test (`Helpers_test::test_warnings_in_application_code_fail_tests`).
 - **Guardrail tests** (run first; a failure blocks everything else): `Guardrail_static_checks_test`, `Guardrail_permission_coverage_test`
   (also the 403 smoke test with a no-permission user), `Input_validator_test`, `Report_query_budget_test`.
 - **Administration tests (step 1):** `Users_test`, `Roles_test`, `Branches_test`, `Settings_test`, `Audit_test`, `Datatable_request_test`,
   `Admin_flow_test` (HTTP: landing page, branch switch, logo upload, CSRF on lists, by-id 403).
+- **Time tests (step 3):** `Shift_calculator_test` (metrics + plan precedence + query budget), `Shifts_test` (incl. assignments),
+  `Rosters_test`, `Holidays_test`, `Time_flow_test` (HTTP: roster grid/save/import, view vs schedule permissions, default shift).
 - **Organisation tests (step 2):** `Organisation_units_test`, `Employees_test` (incl. masking and a real `scope_department`),
   `Employee_pin_test`, `Salary_structure_test`, `Organisation_flow_test` (HTTP: salary/sensitive permissions, documents, photo, branch 403).
 - **Behaviour tests:** `Shift_calculator_test` (normal, grace, night shift, holiday work); `Punch_ingestion_test`; `Day_close_test`;
