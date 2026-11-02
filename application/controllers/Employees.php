@@ -20,6 +20,7 @@ class Employees extends MY_Controller
         'record_exit'     => 'employees_edit',
         'rehire'          => 'employees_edit',
         'change_pin'      => 'employees_edit',
+        'enrol_device'    => 'devices_commands',
         'document_add'    => 'employees_edit',
         'document_delete' => 'employees_edit',
         'link_login'      => 'employees_edit',
@@ -28,7 +29,7 @@ class Employees extends MY_Controller
         'salary_delete'   => 'employees_salary',
         'delete'          => 'employees_delete',
     );
-    protected $post_only = array('ajax_list', 'save', 'update', 'record_exit', 'rehire', 'change_pin', 'document_add', 'document_delete',
+    protected $post_only = array('ajax_list', 'save', 'update', 'record_exit', 'rehire', 'change_pin', 'enrol_device', 'document_add', 'document_delete',
         'link_login', 'unlink_login', 'salary_add', 'salary_delete', 'delete');
 
     public function __construct()
@@ -70,6 +71,11 @@ class Employees extends MY_Controller
         if (has_permission('employees_salary')) {
             $this->load->model('Salary_model');
             $data['salaries'] = $this->Salary_model->history($id);
+        }
+        $data['devices'] = array();
+        if (has_permission('devices_commands')) {
+            $this->load->model('Devices_model');
+            $data['devices'] = $this->Devices_model->options();
         }
         if (has_permission('shifts_view')) {
             $this->load->model('Employee_shifts_model');
@@ -151,6 +157,14 @@ class Employees extends MY_Controller
     {
         $this->belong_to('employees', $id);
         $this->text($this->Employees_model->change_pin($id));
+    }
+
+    /** "Enrol on device": queue create_user (PIN + name) on the chosen devices of the branch */
+    public function enrol_device($id = NULL)
+    {
+        $this->belong_to('employees', $id);
+        $this->load->model('Device_commands_model');
+        $this->text($this->Device_commands_model->enrol($id));
     }
 
     public function document_add($id = NULL)

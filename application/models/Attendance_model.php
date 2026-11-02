@@ -378,7 +378,7 @@ class Attendance_model extends MY_Model
 
     public function punches_page()
     {
-        $dt = new Datatable_request($this->input, array('p.punch_at', 'e.employee_code', 'p.device_pin', 'p.device_id', 'p.punch_state', 'p.source', 'p.ignored'), 0, 'desc');
+        $dt = new Datatable_request($this->input, array('p.punch_at', 'e.employee_code', 'p.device_pin', 'd.name', 'p.punch_state', 'p.source', 'p.ignored'), 0, 'desc');
         $v = new Input_validator($this->input);
         $from = $v->date('from_date', FALSE);
         $to = $v->date('to_date', FALSE);
@@ -399,7 +399,7 @@ class Attendance_model extends MY_Model
         $total = $this->db->count_all_results();
         $filter = function () use ($base, $dt, $employee, $unmatched) {
             $base();
-            $this->db->join('employees e', 'e.id = p.employee_id', 'left');
+            $this->db->join('employees e', 'e.id = p.employee_id', 'left')->join('devices d', 'd.id = p.device_id', 'left');
             if ($employee !== NULL) {
                 $this->db->where('p.employee_id', $employee);
             }
@@ -413,7 +413,7 @@ class Attendance_model extends MY_Model
         $filter();
         $filtered = $this->db->count_all_results();
         $filter();
-        $this->db->select('p.*, e.employee_code, e.first_name, e.last_name');
+        $this->db->select('p.*, e.employee_code, e.first_name, e.last_name, d.name AS device_name');
         $dt->apply($this->db);
         $states = array(0 => 'att_state_in', 1 => 'att_state_out', 4 => 'att_state_ot_in', 5 => 'att_state_ot_out', 255 => 'att_state_unknown');
         $rows = array();
@@ -422,7 +422,7 @@ class Attendance_model extends MY_Model
                 'when'     => e(show_date($r['punch_at']) . substr($r['punch_at'], 10)),
                 'employee' => $r['employee_id'] === NULL ? '<span class="label label-warning">' . e(t('att_unmatched')) . '</span>' : e($r['employee_code'] . ' - ' . trim($r['first_name'] . ' ' . $r['last_name'])),
                 'pin'      => e((string) $r['device_pin']),
-                'device'   => $r['device_id'] === NULL ? '-' : (int) $r['device_id'],
+                'device'   => $r['device_id'] === NULL ? '-' : e((string) $r['device_name']),
                 'state'    => e(t($states[(int) $r['punch_state']])),
                 'source'   => e($r['source']),
                 'ignored'  => (int) $r['ignored'] ? '<span class="label label-default">' . e(t('att_ignored')) . '</span>' : '',
