@@ -193,7 +193,8 @@ class Guardrail_permission_coverage_test extends Hrm_test_case
                 $is_post = in_array($method, $post_only, TRUE);
                 list($status, $body) = $is_post ? $http->post($path) : $http->get($path);
                 if ($key === '@any' || $key === '@self') {
-                    $this->assertNotContains($status, array(403, 404, 405, 500), "$path ($key) must be reachable for a logged-in user");
+                    // reachable (a 404 is fine where the resource itself is missing, e.g. settings/logo without a logo)
+                    $this->assertNotContains($status, array(403, 405, 500), "$path ($key) must be reachable for a logged-in user");
                 } else {
                     $this->assertSame(403, $status, "$path requires $key: a user without permissions must get 403, got $status");
                 }

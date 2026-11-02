@@ -31,6 +31,7 @@ abstract class Hrm_test_case extends TestCase
 
     protected function tearDown(): void
     {
+        $_POST = array();
         if ($this->use_transaction) {
             $this->db->trans_rollback();
             Tx::release_adopted();
@@ -91,6 +92,30 @@ abstract class Hrm_test_case extends TestCase
     {
         $role_id = $this->insert_role('role_' . $username, $permissions, $system);
         return $this->act_as($this->insert_user($username, $role_id, $branch_id));
+    }
+
+    /** replace the request body for in-process model calls (CI_Input reads $_POST live) */
+    protected function post(array $fields)
+    {
+        $_POST = $fields;
+    }
+
+    /** a role with these keys and a login holding it, made the current user */
+    protected function act_with_permissions($username, array $permissions, $branch_id = NULL)
+    {
+        return $this->act_as_new_user($username, $permissions, FALSE, $branch_id);
+    }
+
+    protected function audit_rows($module, $record_id = NULL, $action = NULL)
+    {
+        $this->db->from('audit_log')->where('module', $module);
+        if ($record_id !== NULL) {
+            $this->db->where('record_id', (string) $record_id);
+        }
+        if ($action !== NULL) {
+            $this->db->where('action', $action);
+        }
+        return $this->db->order_by('id')->get()->result_array();
     }
 
     protected function queries_before()

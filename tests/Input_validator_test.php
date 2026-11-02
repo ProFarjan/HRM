@@ -203,7 +203,7 @@ class Input_validator_test extends Hrm_test_case
         $this->assertNull($v->ref('f', 'users'), 'a row of another branch is not valid');
         $this->assertNull($v->ref('z', 'users'), 'unknown id');
         $this->assertNull($v->ref('zero', 'users'));
-        $this->assertNull($v->ref('u', 'roles'), 'a table that is not registered in scoped_tables is never accepted');
+        $this->assertNull($v->ref('u', 'login_attempts'), 'a table that is not registered in scoped_tables is never accepted');
         $this->assertCount(4, $v->errors());
         $this->assertStringContainsString('not valid', $v->message());
     }
@@ -262,5 +262,27 @@ class Input_validator_test extends Hrm_test_case
     {
         $v = $this->v(array('n' => '1'), array('n' => '2'), 'get');
         $this->assertSame(2, $v->int('n'));
+    }
+
+    public function test_email()
+    {
+        $v = $this->v(array('a' => ' HR@Acme.Example ', 'b' => 'not-an-email', 'c' => 'x@y'));
+        $this->assertSame('hr@acme.example', $v->email('a'));
+        $this->assertNull($v->email('b'));
+        $this->assertNull($v->email('c'));
+        $this->assertNull($v->email('missing', 120, FALSE));
+        $this->assertCount(2, $v->errors());
+    }
+
+    public function test_enum_list_accepts_only_known_values()
+    {
+        $allowed = array('users_view', 'users_add', 'audit_view');
+        $v = $this->v(array('p' => array('audit_view', 'users_view', 'audit_view'), 'bad' => array('users_view', 'payroll_pay'), 'nested' => array(array('x')), 'none' => ''));
+        $this->assertSame(array('audit_view', 'users_view'), $v->enum_list('p', $allowed));
+        $this->assertNull($v->enum_list('bad', $allowed));
+        $this->assertNull($v->enum_list('nested', $allowed));
+        $this->assertSame(array(), $v->enum_list('none', $allowed), 'nothing ticked');
+        $this->assertNull($v->enum_list('none', $allowed, TRUE));
+        $this->assertCount(3, $v->errors());
     }
 }

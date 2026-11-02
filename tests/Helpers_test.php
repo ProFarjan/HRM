@@ -130,4 +130,33 @@ class Helpers_test extends Hrm_test_case
         $this->assertSame('Dashboard', t('menu_dashboard'));
         $this->assertSame('no_such_label', t('no_such_label'));
     }
+
+    public function test_bangla_and_english_have_the_same_labels()
+    {
+        $read = function ($language) {
+            $lang = array();
+            include APPPATH . 'language/' . $language . '/hrm_lang.php';
+            return $lang;
+        };
+        $en = $read('english');
+        $bn = $read('bangla');
+        $this->assertSame(array(), array_values(array_diff(array_keys($en), array_keys($bn))), 'missing in bangla');
+        $this->assertSame(array(), array_values(array_diff(array_keys($bn), array_keys($en))), 'only in bangla');
+        foreach ($en as $key => $line) {
+            $this->assertSame(substr_count($line, '%'), substr_count($bn[$key], '%'), "placeholders of $key");
+        }
+    }
+
+    public function test_every_menu_label_and_permission_exists()
+    {
+        $catalog = permission_catalog_keys();
+        foreach (config_item('menu') as $item) {
+            $this->assertNotSame($item['label'], t($item['label']), $item['label']);
+            foreach (isset($item['children']) ? $item['children'] : array($item) as $entry) {
+                $this->assertNotSame($entry['label'], t($entry['label']), $entry['label']);
+                $this->assertTrue($entry['permission'] === '@any' || isset($catalog[$entry['permission']]), $entry['permission']);
+                $this->assertFileExists(APPPATH . 'controllers/' . ucfirst(explode('/', $entry['url'])[0]) . '.php', 'menu points to a real controller');
+            }
+        }
+    }
 }
