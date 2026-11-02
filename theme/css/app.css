@@ -1,0 +1,5 @@
+/* HRM shell tweaks on top of AdminLTE 2. Page specific styles go in css/<module>.css. */
+.content-wrapper { min-height: 400px; }
+.login-box-body .alert { margin-bottom: 15px; }
+table.dataTable thead th { white-space: nowrap; }
+.text-money { text-align: right; font-variant-numeric: tabular-nums; }
