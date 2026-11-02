@@ -14,7 +14,7 @@
             <file>tests/Guardrail_permission_coverage_test.php</file>
             <file>tests/Input_validator_test.php</file>
         </testsuite>
-        <testsuite name="foundation-administration-organisation">
+        <testsuite name="foundation-administration-organisation-time">
             <file>tests/Tx_test.php</file>
             <file>tests/Idempotency_test.php</file>
             <file>tests/Sequences_test.php</file>
@@ -34,6 +34,11 @@
             <file>tests/Employee_pin_test.php</file>
             <file>tests/Salary_structure_test.php</file>
             <file>tests/Organisation_flow_test.php</file>
+            <file>tests/Shift_calculator_test.php</file>
+            <file>tests/Shifts_test.php</file>
+            <file>tests/Rosters_test.php</file>
+            <file>tests/Holidays_test.php</file>
+            <file>tests/Time_flow_test.php</file>
             <file>tests/Migration_roundtrip_test.php</file>
         </testsuite>
     </testsuites>

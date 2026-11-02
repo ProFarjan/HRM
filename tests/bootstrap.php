@@ -28,6 +28,10 @@ require HRM_ROOT . '/index.php';                   // boots CI and runs Cron::pi
 ob_end_clean();
 
 ini_set('display_errors', '1');                    // index.php hides errors in the testing environment; a fatal in a test must be visible
+// CodeIgniter installed its own error and exception handlers. PHPUnit 9 does not replace an existing error handler, so with
+// CI's in place a warning or notice in application code would only be printed, never fail the test: hand control back.
+restore_error_handler();
+restore_exception_handler();
 load_class('Model', 'core');                       // CI_Model + MY_Model, so test files can declare model subclasses
 require_once HRM_ROOT . '/tests/support/Fake_input.php';
 require_once HRM_ROOT . '/tests/support/Hrm_test_case.php';
