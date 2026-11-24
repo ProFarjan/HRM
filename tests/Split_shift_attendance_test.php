@@ -46,18 +46,18 @@ class Split_shift_attendance_test extends Hrm_test_case
 
     public function test_four_punches_build_a_day_of_two_periods()
     {
-        $this->punch(array('10:02', '14:01', '17:55', '22:03'));
+        $this->punch(array('10:02', '14:00', '17:55', '18:00', '22:00', '22:03'));
         $row = $this->day();
-        $this->assertSame(array('Present', 'punch', '10:02:00', '22:03:00'), array($row['status'], $row['source'], $row['check_in'], $row['check_out']));
-        $this->assertEquals(round((239 + 248) / 60, 2), (float) $row['working_hours'], 'both periods, and not the four hours in between');
-        $this->assertSame(234, (int) $row['break_minutes'], '14:01 to 17:55 is the gap actually taken');
+        $this->assertSame(array('Present', 'punch', '10:02:00', '22:00:00'), array($row['status'], $row['source'], $row['check_in'], $row['check_out']));
+        $this->assertEquals(round((238 + 240) / 60, 2), (float) $row['working_hours'], 'both periods, and not the four hours in between');
+        $this->assertSame(240, (int) $row['break_minutes']);
         $this->assertSame(array(0, 0), array((int) $row['late_minutes'], (int) $row['early_leave_minutes']));
         $this->assertNull($row['remarks']);
-        $this->assertEquals(0.12, (float) $row['overtime_hours'], '5 min early to the second period and 3 after: worked 487 of 480 minutes (7 minutes)');
+        $this->assertEquals(0.0, (float) $row['overtime_hours']);
         $periods = $this->periods_of($row['id']);
         $this->assertCount(2, $periods);
-        $this->assertSame(array('10:02:00', '14:01:00', 239), array($periods[1]['check_in'], $periods[1]['check_out'], (int) $periods[1]['worked_minutes']));
-        $this->assertSame(array('17:55:00', '22:03:00', 248), array($periods[2]['check_in'], $periods[2]['check_out'], (int) $periods[2]['worked_minutes']));
+        $this->assertSame(array('10:02:00', '14:00:00', 238), array($periods[1]['check_in'], $periods[1]['check_out'], (int) $periods[1]['worked_minutes']));
+        $this->assertSame(array('18:00:00', '22:00:00', 240), array($periods[2]['check_in'], $periods[2]['check_out'], (int) $periods[2]['worked_minutes']));
         $this->assertSame($this->shift, (int) $row['shift_id']);
     }
 
@@ -116,7 +116,7 @@ class Split_shift_attendance_test extends Hrm_test_case
         $this->assign_shift($this->emp, $normal);
         $this->assertSame('rebuilt', $this->ingestor->rebuild_day($this->emp, '2026-04-06'));
         $this->assertSame(array(), $this->periods_of($id), 'an ordinary shift has no periods');
-        $this->assertSame('22:00:00', $this->day()['check_out']);
+        $this->assertSame('18:00:00', $this->day()['check_out']);
     }
 
     public function test_a_night_split_shift()
@@ -125,12 +125,12 @@ class Split_shift_attendance_test extends Hrm_test_case
         $emp = $this->insert_employee('SA2', array('device_pin' => '62', 'device_pin_from' => '2024-01-01'));
         $this->assign_shift($emp, $night);
         $punches = array(array('device_pin' => '62', 'punch_at' => '2026-04-06 18:00:00'), array('device_pin' => '62', 'punch_at' => '2026-04-06 22:00:00'),
-            array('device_pin' => '62', 'punch_at' => '2026-04-06 23:00:00'), array('device_pin' => '62', 'punch_at' => '2026-04-07 02:01:00'));
+            array('device_pin' => '62', 'punch_at' => '2026-04-06 23:00:00'), array('device_pin' => '62', 'punch_at' => '2026-04-07 02:00:00'));
         $r = $this->ingestor->ingest($punches, array('branch_id' => current_branch_id(), 'device_id' => $this->device, 'source' => 'device_service'));
         $this->assertTrue($r['ok']);
         $row = $this->attendance_row($emp, '2026-04-06');
-        $this->assertSame(array('18:00:00', '02:01:00'), array($row['check_in'], $row['check_out']));
-        $this->assertEquals(7.02, (float) $row['working_hours']);
+        $this->assertSame(array('18:00:00', '02:00:00'), array($row['check_in'], $row['check_out']));
+        $this->assertEquals(7.0, (float) $row['working_hours']);
         $this->assertNull($this->attendance_row($emp, '2026-04-07'), 'the after-midnight punch belongs to the day the shift began');
     }
 
@@ -259,9 +259,9 @@ class Split_shift_attendance_test extends Hrm_test_case
 
     public function test_the_calendar_shows_the_periods()
     {
-        $this->punch(array('10:02', '14:01', '17:55', '22:03'));
+        $this->punch(array('10:02', '14:00', '17:55', '18:00', '22:00', '22:03'));
         $events = $this->CI->Attendance_model->calendar_events($this->emp, '2026-04-01', '2026-04-30');
         $titles = array_column($events, 'title', 'start');
-        $this->assertStringContainsString('10:02-14:01 / 17:55-22:03', $titles['2026-04-06']);
+        $this->assertStringContainsString('10:02-14:00 / 18:00-22:00', $titles['2026-04-06']);
     }
 }

@@ -11,8 +11,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  * 2. debounce: within punch_debounce_seconds of the previous kept punch of the same PIN => stored with ignored = 1;
  * 3. the owner of a PIN on the punch date: employees.device_pin (from device_pin_from), else employee_pin_history; unmatched
  *    punches keep employee_id NULL until the PIN is linked (reprocess_unmatched());
- * 4. each touched employee/day is rebuilt from all its non-ignored punches (rebuild_day()); a punch up to the previous day's
- *    night-shift end + 4 h belongs to that previous day;
+ * 4. each touched employee/day is rebuilt from all its non-ignored punches (rebuild_day()); only punches inside assigned duty periods count, including overnight periods;
  * 5. rows HR made by hand (source manual / self) are kept unless a rebuild is forced; locked rows are never changed;
  * 6. the whole batch is one Tx::run().
  *
@@ -21,7 +20,6 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  */
 class Punch_ingestor
 {
-    const NIGHT_TAIL_MINUTES = 240;
     /** remark on a split-shift day with a duty period that has no punches or no check-out */
     const REMARK_INCOMPLETE = 'incomplete duty period';
 
@@ -141,8 +139,9 @@ class Punch_ingestor
             return 'empty';
         }
         $today_plan = $plan[$employee_id][$date];
-        $prev_plan = $plan[$employee_id][$prev];
-        list($start, $end) = $this->window($date, $prev_plan['shift'], $today_plan['shift']);
+        $windows = $this->windows($date, $today_plan['shift']);
+        $start = $windows[0][0];
+        $end = $windows[count($windows) - 1][1];
 
         $existing = $db->query('SELECT * FROM attendance WHERE employee_id = ? AND attendance_date = ? FOR UPDATE', array($employee_id, $date))->row_array();
         if ($existing && (int) $existing['locked'] === 1) {
@@ -155,6 +154,10 @@ class Punch_ingestor
             'SELECT punch_at, punch_state FROM attendance_punches WHERE employee_id = ? AND ignored = 0 AND punch_at BETWEEN ? AND ? ORDER BY punch_at, id',
             array($employee_id, $start, $end)
         )->result_array();
+        $previous_windows = $plan[$employee_id][$prev]['shift'] ? $this->windows($prev, $plan[$employee_id][$prev]['shift']) : array();
+        $punches = array_values(array_filter($punches, function ($punch) use ($windows, $previous_windows) {
+            return $this->contains($windows, $punch['punch_at']) && ! $this->contains($previous_windows, $punch['punch_at']);
+        }));
         if ( ! $punches) {
             if ($existing && ($existing['source'] === 'punch' || $force)) {
                 $db->where('id', (int) $existing['id'])->delete('attendance');     // the day close fills it again if the day is closed
@@ -250,6 +253,7 @@ class Punch_ingestor
         }
 
         $touched = array();
+        $debounce_plans = array();
         $now = now_local();
         foreach ($clean as $p) {
             $employee = $p['employee_id'];
@@ -267,6 +271,23 @@ class Punch_ingestor
                 }
                 if ($previous !== NULL && $ts - $previous < $debounce) {
                     $ignored = 1;
+                    if ($employee !== NULL) {
+                        // A tap just before a duty period must not suppress its first valid punch.
+                        $date = substr($p['punch_at'], 0, 10);
+                        $key = $employee . '|' . $date;
+                        if ( ! isset($debounce_plans[$key])) {
+                            $plan = $this->calc->plan(array($employee), date('Y-m-d', strtotime($date . ' -1 day')), $date);
+                            $debounce_plans[$key] = $plan[$employee];
+                        }
+                        $plan = $debounce_plans[$key];
+                        $day = $this->attendance_date($plan, $p['punch_at']);
+                        foreach ($this->windows($day, $plan[$day]['shift']) as $window) {
+                            if ($this->contains(array($window), $p['punch_at']) && date('Y-m-d H:i:s', $previous) < $window[0]) {
+                                $ignored = 0;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             if ($device_id === NULL && $employee !== NULL
@@ -336,29 +357,34 @@ class Punch_ingestor
     {
         $date = substr($punch_at, 0, 10);
         $prev = date('Y-m-d', strtotime($date . ' -1 day'));
-        if (isset($employee_plan[$prev]) && $employee_plan[$prev]['shift'] && (int) $employee_plan[$prev]['shift']['is_night'] === 1) {
-            $tail = Shift_calculator::minutes($employee_plan[$prev]['shift']['end_time']) + self::NIGHT_TAIL_MINUTES;
-            if (Shift_calculator::minutes(substr($punch_at, 11)) <= $tail) {
-                return $prev;
-            }
+        if ( ! empty($employee_plan[$prev]['shift']) && $this->contains($this->windows($prev, $employee_plan[$prev]['shift']), $punch_at)) {
+            return $prev;
         }
         return $date;
     }
 
-    /** [start, end] datetimes of the punches that belong to $date */
-    protected function window($date, $prev_shift, $shift)
+    protected function windows($date, $shift)
     {
-        $start = $date . ' 00:00:00';
-        if ($prev_shift && (int) $prev_shift['is_night'] === 1) {
-            $tail = Shift_calculator::minutes($prev_shift['end_time']) + self::NIGHT_TAIL_MINUTES;
-            $start = date('Y-m-d H:i:s', strtotime($date . ' 00:00:00') + $tail * 60 + 60);
+        if ( ! $shift) {
+            return array(array($date . ' 00:00:00', $date . ' 23:59:59'));
         }
-        $end = $date . ' 23:59:59';
-        if ($shift && (int) $shift['is_night'] === 1) {
-            $tail = Shift_calculator::minutes($shift['end_time']) + self::NIGHT_TAIL_MINUTES;
-            $end = date('Y-m-d H:i:s', strtotime($date . ' 00:00:00') + 86400 + $tail * 60 + 59);
+        $windows = array();
+        foreach (Shift_calculator::periods($shift) as $period) {
+            $start_day = date('Y-m-d', strtotime($date . ' +' . intdiv($period['s'], 1440) . ' days'));
+            $end_day = date('Y-m-d', strtotime($date . ' +' . intdiv($period['e'], 1440) . ' days'));
+            $windows[] = array($start_day . ' ' . substr($period['start'] . ':00', 0, 8), $end_day . ' ' . substr($period['end'] . ':00', 0, 8));
         }
-        return array($start, $end);
+        return $windows;
+    }
+
+    protected function contains(array $windows, $at)
+    {
+        foreach ($windows as $window) {
+            if ($at >= $window[0] && $at <= $window[1]) {
+                return TRUE;
+            }
+        }
+        return FALSE;
     }
 
     /** current holders and history of the PINs in a branch (2 queries) */

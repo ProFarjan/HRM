@@ -45,15 +45,15 @@ class Punch_ingestion_test extends Hrm_test_case
 
     public function test_four_punches_give_one_break_of_the_right_length()
     {
-        $r = $this->ingest($this->punches(array('2026-04-06 08:55:00', '2026-04-06 13:00:00', '2026-04-06 13:45:00', '2026-04-06 18:05:00')));
-        $this->assertSame(array(4, 4, 0, 1), array($r['received'], $r['stored'], $r['duplicates'], $r['rebuilt']));
+        $r = $this->ingest($this->punches(array('2026-04-06 08:59:59', '2026-04-06 09:00:00', '2026-04-06 13:00:00', '2026-04-06 13:45:00', '2026-04-06 18:00:00', '2026-04-06 18:05:00')));
+        $this->assertSame(array(6, 6, 0, 1), array($r['received'], $r['stored'], $r['duplicates'], $r['rebuilt']));
         $row = $this->attendance_row($this->emp, '2026-04-06');
-        $this->assertSame(array('Present', '08:55:00', '18:05:00', 'Approved', 'punch'), array($row['status'], $row['check_in'], $row['check_out'], $row['approval_status'], $row['source']));
+        $this->assertSame(array('Present', '09:00:00', '18:00:00', 'Approved', 'punch'), array($row['status'], $row['check_in'], $row['check_out'], $row['approval_status'], $row['source']));
         $this->assertSame(45, (int) $row['break_minutes']);
-        $this->assertEquals(9.17, (float) $row['working_hours']);
+        $this->assertEquals(9.0, (float) $row['working_hours']);
         $this->assertSame(0, (int) $row['late_minutes']);
-        $this->assertEquals(1.17, (float) $row['overtime_hours'], '550 - 480 min');
-        $this->assertSame(4, $this->db->get_where('attendance_punches', array('employee_id' => $this->emp))->num_rows(), 'every raw punch is stored');
+        $this->assertEquals(1.0, (float) $row['overtime_hours'], '540 - 480 min');
+        $this->assertSame(6, $this->db->get_where('attendance_punches', array('employee_id' => $this->emp))->num_rows(), 'every raw punch is stored');
     }
 
     public function test_in_out_states_decide_the_breaks_when_present()
@@ -156,13 +156,13 @@ class Punch_ingestion_test extends Hrm_test_case
         $night = $this->insert_shift('NGT', '22:00:00', '06:00:00', array('working_hours' => 8));
         $guard = $this->insert_employee('G1', array('device_pin' => '202', 'device_pin_from' => '2024-01-01'));
         $this->assign_shift($guard, $night);
-        $this->ingest($this->punches(array('2026-04-06 21:55:00', '2026-04-07 06:10:00', '2026-04-07 10:30:00'), '202'));
+        $this->ingest($this->punches(array('2026-04-06 22:00:00', '2026-04-07 06:00:00', '2026-04-07 10:30:00'), '202'));
         $row = $this->attendance_row($guard, '2026-04-06');
-        $this->assertSame(array('21:55:00', '06:10:00', '2026-04-07 06:10:00'), array($row['check_in'], $row['check_out'], $row['last_punch_at']));
-        $this->assertEquals(8.25, (float) $row['working_hours']);
-        $this->assertEquals(0.25, (float) $row['overtime_hours']);
+        $this->assertSame(array('22:00:00', '06:00:00', '2026-04-07 06:00:00'), array($row['check_in'], $row['check_out'], $row['last_punch_at']));
+        $this->assertEquals(8.0, (float) $row['working_hours']);
+        $this->assertEquals(0.0, (float) $row['overtime_hours']);
         $next = $this->attendance_row($guard, '2026-04-07');
-        $this->assertSame('10:30:00', $next['check_in'], 'after end + 4 h it is the next day');
+        $this->assertNull($next, 'the daytime punch stays in the raw log');
     }
 
     public function test_the_branch_comes_from_the_device_context_only()
